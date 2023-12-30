@@ -1,20 +1,23 @@
 # ---------------------------------------------------------------------------- #
-# estimate risk scores
+# Estimate risk scores
 # ---------------------------------------------------------------------------- #
 
 #library(aif360)
 library(causalDML)
 
-source("src/01-prepare-data.R")
-# TODO required for x_risk matrix, cleaner way?
 
 # ---------------------------------------------------------------------------- #
 
-# TODO change if necessary 
+# change if necessary 
 setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
 
-#source("src/01-prepare-data.R")
+source("src/01-prepare-data.R")
 db = read.csv("data/almp_effects.csv")
+
+# ---------------------------------------------------------------------------- #
+# smaller dataset
+db <- db %>%
+  slice_sample(prop = 0.3)
 
 
 # ---------------------------------------------------------------------------- #

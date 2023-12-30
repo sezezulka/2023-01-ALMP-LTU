@@ -12,57 +12,21 @@ setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
 seed = 12345
 
 # ---------------------------------------------------------------------------- #
-# number of place to be allocated
-db %>% 
-  group_by(treatment6) %>%
-  summarise(N = n())
 
-colSums(wm)
-
-# 1 computer      905
-# 2 employment    611
-# 3 job search  11610
-# 4 language     1504
-# 5 no program  47631
-# 6 personality  1177
-# 7 vocational    858
-
-# list with ALMPs and capacities
-programs_list <- list(iapo_no_program = 47631,
-                      iapo_vocational = 858,
-                      iapo_computer = 905,
-                      iapo_language = 1504,
-                      iapo_job_search = 11610,
-                      iapo_employment = 611,
-                      iapo_personality = 1177)
-
-# ---------------------------------------------------------------------------- #
-# Policy 1: Prioritisation (Belgium)
-# ---------------------------------------------------------------------------- #
-# rank by risk score, those with highest risk get 
-# Policy 1.1: upper bound (most effective course, until courses filled)
-
-# create variable with largest IATE
-# db <- db %>%
-#   mutate(max_iate = names(across(starts_with('iate_')))[max.col(across(starts_with('iate_')))]) 
-
-
-
-
-                      
-
-
-f_alg_policy <- function(data, policy, risk_score, effect_type, new_outcome_name) {
+f_alg_policy <- function(data, policy, risk_score, effect_type, assignment_type, new_outcome_name) {
   
   #############################################################
   #
   # performs algorithmically informed policy for allocation
   # into ALMPs
   #
-  # data :          dataset
-  # policy :        string, {Beglian, Austrian}
-  # risk_score :    string, name of risk score to be used
-  # effect_type :  string, {min, max} 
+  # data :              dataset, including treatment variable ("treatment6"),
+  #                     estimated IAPOs, propensity scores, ...
+  # policy :            string, {Beglian, Austrian}
+  # risk_score :        string, name of risk score to be used
+  # effect_type :       string, {min, max} 
+  # assignment_type :   string, {upper, emp, lower}
+  # new_outcome_name :  string, name of new variable
   #
   #############################################################
   
@@ -73,14 +37,15 @@ f_alg_policy <- function(data, policy, risk_score, effect_type, new_outcome_name
   data <- f_create_outcome_var(data, new_outcome_name)
   
   # sort data according to policy by risk_score
-  data <- risk_score_to_policy(data, policy, risk_score)
+  data <- f_risk_2_policy(data, policy, risk_score)
   
   # greedy allocation
-  data <- f_greedy_allocation(data, list_programs, effect_type)
+  data <- f_greedy_allocation(data, program_capacities, effect_type, assignment_type, new_outcome_name)
   
+  # add potential outcomes for program allocation
+  data <- f_program_2_iapo(data, new_outcome_name)
   
-    
-  
+  return(data)
 }
 
 f_get_capacities <- function(data, name_treatment_var) {
@@ -92,7 +57,7 @@ f_get_capacities <- function(data, name_treatment_var) {
   # data :                dataset
   # name_treatment_var :  name of treatment variable
   #
-  # Returns tibble.
+  # Returns list.
   #
   #############################################################
   
@@ -103,7 +68,14 @@ f_get_capacities <- function(data, name_treatment_var) {
     group_by({{name_treatment_var}}) %>%
     summarise(N = n())
   
-  return(program_capacities)
+  list_programs <- as.list(setNames(program_capacities$N, program_capacities %>% pull({{ name_treatment_var }})))
+  
+  # change names in list 
+  # TODO fix requirement 
+  new_names <- paste0("iapo_", gsub(" ", "_", names(list_programs)))
+  names(list_programs) <- new_names
+  
+  return(list_programs)
   
 }
 
@@ -113,7 +85,7 @@ f_create_outcome_var <- function(data, new_outcome_name) {
   #
   # Creates new outcome variable for algorithmically informed policy
   #
-  # data : 
+  # data :              dataset
   # new_outcome_name :  string, name of new variable
   #
   #############################################################
@@ -245,7 +217,7 @@ f_find_random_program_i <- function() {
   return(assigned_program_name) 
 }
 
-f_program_names <- function(list_programs) {
+f_temp_program_names <- function(list_programs) {
   
   #############################################################
   #
@@ -263,11 +235,6 @@ f_program_names <- function(list_programs) {
 
 f_update_capacities <- function(list_programs, assigned_program_name) {
 
-  # write general: assign program given, either most effective, highest propensity or random
-  # where to test whether no program is more effective? better above! 
-  # here only assign and reduce capacity 
-  # add "no_program" as option above? 
-  
   #############################################################
   #
   # Update program capacities after assignment.
@@ -289,59 +256,101 @@ f_update_capacities <- function(list_programs, assigned_program_name) {
   
 }
 
-f_greedy_allocation <- function(data, list_programs, effect_type) {
+f_greedy_allocation <- function(data, list_programs, effect_type, assignment_type, new_outcome_name) {
   
   #############################################################
   #
   # performs greedy allocation of individuals into ALMPs
   # according to capacity
   #
-  # data :          dataset
-  # list_programs : list of available ALMPs and capacities 
-  # effect_type :   string, {min, max} 
+  # data :              dataset
+  # list_programs :     list of available ALMPs and capacities 
+  # effect_type :       string, {min, max} 
+  # assignment_type :   string, {upper, emp, lower}
+  # new_outcome_name :  string, name of new variable
   #
   #############################################################
   
-  n <- nrwo(data)
+  n <- nrow(data)
   
   for (i in 1:n) {
     
-    if (all(programs_list > 0)) {
+    if (all(list_programs > 0)) {
       # test availability of capacities
       
       # select available program names 
       temp_program_names <- f_temp_program_names(list_programs)
       
-      # if (!any(nzchar(temp_program_names))) {
-      #   # test if any non-zero character (= only "no program" left)
-      #   # TODO does not work yet!
-      #   print("No program left.")
-      #   break
-      # }
+      if (!any(nzchar(temp_program_names))) {
+        # test if any non-zero character (= only "no program" left)
+        warning("Warning: Some program name has zero-length character.")
+      }
       
-      most_effective_program <- f_find_effective_program(data, temp_program_names, i, effect_type)
+      # select program name
+      if (assignment_type == "upper") {
+        # upper bound, assign most effective available program
+        
+        assigned_program_name <- f_find_effective_program_i(data, temp_program_names, effect_type, i)
+        
+      } else if (assignment_type == "lower") {
+        # lower bound, assign random available program
+        
+        assigned_program_name <- f_find_random_program_i()
+        
+      } else if (assignment_type == "emp") {
+        # empirical strategy, assign program by propensity score
+        
+        assigned_program_name <- f_find_propensity_program_i()
+          
+      } else {
+        
+        stop("Error: Assignment type must be \"upper\", \"lower\", or \"emp\".")
+      }
       
       # assign program
-      data[[new_var_name]][i] <- most_effective_program
+      data[[new_outcome_name]][i] <- assigned_program_name
       
       # update program capacities
-      list_programs <- f_update_capacities(list_programs, most_effective_program)
+      list_programs <- f_update_capacities(list_programs, assigned_program_name)
     } else {
-        break 
-      }
       
-      if (i %% 1e3 == 0) {
-        # print #iteration and program capacities
-        cat('Iteration:', i, '\n')
-        print(programs_list)
-      }
+        stop("Error: No program capacity before loop has closed.") 
+    }
+    
+    if (i %% 1e3 == 0) {
+      # print #iteration and program capacities
+      cat('Iteration:', i, '\n')
+      print(list_programs)
+    }
   }
   
   return(data)
-} 
+}
 
+f_program_2_iapo <- function(data, new_outcome_name) {
+  
+  #############################################################
+  #
+  # Translate program assignment into potential outcome under policy.
+  #
+  # data :              dataset
+  # new_outcome_name :  string, name of new variable
+  #
+  # Returns dataset.
+  #
+  #############################################################
+  
+  new_potential_outcome_name <- paste0("iapo_", new_outcome_name)
+  
+  data[[new_potential_outcome_name]] <- map(seq(nrow(data)), function(i) {
+    iapo_program <- data[[new_outcome_name]][i]
+    data[[iapo_program]][i]
+  })
+  
+  return(data)
+}
 
-
+test <- f_alg_policy(db, "Belgian", "risk_log", "min", "upper", "p11_almp")
 
 
 
@@ -378,6 +387,30 @@ f_effective_program <- function(data, temp_program_names, effect_type) {
   }
 }
 
+
+# number of place to be allocated
+db %>% 
+  group_by(treatment6) %>%
+  summarise(N = n())
+
+colSums(wm)
+
+# 1 computer      905
+# 2 employment    611
+# 3 job search  11610
+# 4 language     1504
+# 5 no program  47631
+# 6 personality  1177
+# 7 vocational    858
+
+# list with ALMPs and capacities
+programs_list <- list(iapo_no_program = 47631,
+                      iapo_vocational = 858,
+                      iapo_computer = 905,
+                      iapo_language = 1504,
+                      iapo_job_search = 11610,
+                      iapo_employment = 611,
+                      iapo_personality = 1177)
 
 
 # Greedy allocation
