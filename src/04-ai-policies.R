@@ -401,8 +401,7 @@ f_program_2_iapo <- function(data, new_outcome_name) {
   
   new_potential_outcome_name <- paste0("iapo_", new_outcome_name)
   
-  # TODO check type of new variable (double?) and consider change!
-  data[[new_potential_outcome_name]] <- map(seq(nrow(data)), function(i) {
+  data[[new_potential_outcome_name]] <- map_dbl(seq(nrow(data)), function(i) {
     iapo_program <- data[[new_outcome_name]][i]
     data[[iapo_program]][i]
   })
@@ -413,7 +412,8 @@ f_program_2_iapo <- function(data, new_outcome_name) {
 # ---------------------------------------------------------------------------- #
 
 test <- f_alg_policy(db, "Austrian", "risk_log", "min", "lower", "p_a_log_min_lower")
-
+# TODO test what happens if function is called again on exact same parameters 
+# TODO does random/prop-score weighted assignment required several runs and averaging? 
 
 
 
