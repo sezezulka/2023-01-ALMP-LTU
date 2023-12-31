@@ -5,6 +5,8 @@
 #library(aif360)
 library(causalDML)
 
+library(mlr3)
+library(mlr3fairness)
 
 # ---------------------------------------------------------------------------- #
 

@@ -13,7 +13,7 @@ seed = 12345
 
 # ---------------------------------------------------------------------------- #
 
-f_alg_policy <- function(data, policy, risk_score, effect_type, assignment_type, new_outcome_name) {
+f_alg_policy <- function(data, policy, risk_score, effect_type, assignment_type, new_outcome_name, seed=1234) {
   
   #############################################################
   #
@@ -27,6 +27,7 @@ f_alg_policy <- function(data, policy, risk_score, effect_type, assignment_type,
   # effect_type :       string, {min, max} 
   # assignment_type :   string, {upper, emp, lower}
   # new_outcome_name :  string, name of new variable
+  # seed :              set seed
   #
   #############################################################
   
@@ -40,7 +41,7 @@ f_alg_policy <- function(data, policy, risk_score, effect_type, assignment_type,
   data <- f_risk_2_policy(data, policy, risk_score)
   
   # greedy allocation
-  data <- f_greedy_allocation(data, program_capacities, effect_type, assignment_type, new_outcome_name)
+  data <- f_greedy_allocation(data, program_capacities, effect_type, assignment_type, new_outcome_name, seed=1234)
   
   # add potential outcomes for program allocation
   data <- f_program_2_iapo(data, new_outcome_name)
@@ -156,49 +157,34 @@ f_find_effective_program_i <- function(data, temp_program_names, effect_type, i)
   # i :                   row number
   # effect_type :         string, {min, max} 
   #
+  # Returns name of most effective program.
+  #
   #############################################################
   
   if (effect_type == "min") {
     # effect that minimises target variable
     
-    most_effective_program <- data %>%
+    assigned_program_name <- data %>%
       slice(i) %>%
       select(all_of(temp_program_names)) %>%
       mutate(best_program = names(.)[which.min(.)]) %>%
       select(best_program) %>%
       pull()
     
-    # if (data[[most_effective_program]][i] <= 0) {
-    #   # test if program is at least as effective as baseline ("no program")
-    #   
-    #   return(most_effective_program)
-    # } else {
-    #   
-    #   most_effective_program <- 'iate_no_program'
-    #   return(most_effective_program)
-    # }
-    return(most_effective_program)
+
+    return(assigned_program_name)
     
   } else if (effect_type == "max") {
     # effect that maximises target variable
     
-    most_effective_program <- data %>%
+    assigned_program_name <- data %>%
       slice(i) %>%
       select(all_of(temp_program_names)) %>%
       mutate(best_program = names(.)[max.col(.)]) %>%
       select(best_program) %>%
       pull()
     
-    # if (data[[most_effective_program]][i] >= 0) {
-    #   # test if program is at least as effective as baseline ("no program")
-    #   
-    #   return(most_effective_program)
-    # } else {
-    #   
-    #   most_effective_program <- 'iate_no_program'
-    #   return(most_effective_program)
-    # }
-    return(most_effective_program)
+    return(assigned_program_name)
     
   } else {
 
@@ -206,13 +192,86 @@ f_find_effective_program_i <- function(data, temp_program_names, effect_type, i)
   }
 }
 
-f_find_propensity_program_i <- function() {
- 
+f_draw_program_assignment <- function(programs, propensities) {
+  
+  #############################################################
+  # 
+  # programs :      list of programs, length n
+  # propensities :  list of propensities, length n
+  #
+  # Returns string with sampled program.
+  #
+  #############################################################
+  
+  sampled_program <- sample(programs, 1, prob = propensities)
+  return(sampled_program)
+}
+
+f_find_propensity_program_i <- function(data, temp_program_names, i, seed=1234) {
+  
+  #############################################################
+  # 
+  # select program by propensity score, propensities as weights
+  #
+  # data : 
+  # temp_program_names :
+  # i :
+  # seed : 
+  #
+  # Returns name of selected program.
+  #
+  #############################################################
+  
+  temp_em_program_names <- sub('iapo', 'em', temp_program_names)
+  
+  # # deterministic assignment of program with highest propensity
+  # assigned_program_name <- data %>%
+  #   slice(i) %>%
+  #   select(all_of(temp_em_program_names)) %>%
+  #   mutate(best_program = names(.)[max.col(.)]) %>%
+  #   select(best_program) %>%
+  #   pull()
+  
+  # probabilistic assignment using propensities as weights
+  assigned_program_name <- data %>%
+    slice(i) %>%
+    select(all_of(temp_em_program_names)) %>% 
+    mutate(selected_program = f_draw_program_assignment(names(.), .)) %>%
+    select(selected_program) %>%
+    pull()
+  
+  # change name back to "iapo_" for later 
+  assigned_program_name <- sub('em', 'iapo', assigned_program_name)
+    
   return(assigned_program_name) 
 }
 
-f_find_random_program_i <- function() {
+f_find_random_program_i <- function(data, temp_program_names, i, seed=1234) {
  
+  
+  #############################################################
+  # 
+  # select random (uniformly) program from available 
+  #
+  # data : 
+  # temp_program_names :
+  # i :
+  # seed : 
+  #
+  # Returns name of selected program.
+  #
+  #############################################################
+  
+  # uniform probabilities for assignment
+  n <- length(temp_program_names)
+  prob_uniform <- rep(1/n, n)
+  
+  assigned_program_name <- data %>%
+    slice(i) %>%
+    select(all_of(temp_program_names)) %>% 
+    mutate(selected_program = f_draw_program_assignment(names(.), prob_uniform)) %>%
+    select(selected_program) %>%
+    pull()
   
   return(assigned_program_name) 
 }
@@ -256,7 +315,7 @@ f_update_capacities <- function(list_programs, assigned_program_name) {
   
 }
 
-f_greedy_allocation <- function(data, list_programs, effect_type, assignment_type, new_outcome_name) {
+f_greedy_allocation <- function(data, list_programs, effect_type, assignment_type, new_outcome_name, seed=1234) {
   
   #############################################################
   #
@@ -295,12 +354,12 @@ f_greedy_allocation <- function(data, list_programs, effect_type, assignment_typ
       } else if (assignment_type == "lower") {
         # lower bound, assign random available program
         
-        assigned_program_name <- f_find_random_program_i()
+        assigned_program_name <- f_find_random_program_i(data, temp_program_names, i, seed)
         
       } else if (assignment_type == "emp") {
         # empirical strategy, assign program by propensity score
         
-        assigned_program_name <- f_find_propensity_program_i()
+        assigned_program_name <- f_find_propensity_program_i(data, temp_program_names, i, seed)
           
       } else {
         
@@ -342,6 +401,7 @@ f_program_2_iapo <- function(data, new_outcome_name) {
   
   new_potential_outcome_name <- paste0("iapo_", new_outcome_name)
   
+  # TODO check type of new variable (double?) and consider change!
   data[[new_potential_outcome_name]] <- map(seq(nrow(data)), function(i) {
     iapo_program <- data[[new_outcome_name]][i]
     data[[iapo_program]][i]
@@ -350,13 +410,27 @@ f_program_2_iapo <- function(data, new_outcome_name) {
   return(data)
 }
 
-test <- f_alg_policy(db, "Belgian", "risk_log", "min", "upper", "p11_almp")
+# ---------------------------------------------------------------------------- #
+
+test <- f_alg_policy(db, "Austrian", "risk_log", "min", "lower", "p_a_log_min_lower")
 
 
 
 
 
 
+
+
+
+# if (data[[most_effective_program]][i] <= 0) {
+#   # test if program is at least as effective as baseline ("no program")
+#   
+#   return(most_effective_program)
+# } else {
+#   
+#   most_effective_program <- 'iate_no_program'
+#   return(most_effective_program)
+# }
 
 f_effective_program <- function(data, temp_program_names, effect_type) {
   
