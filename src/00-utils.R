@@ -34,16 +34,17 @@ effects_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_
                       "prev_job_sec3","prev_job_self","prev_job_skilled","prev_job_unskilled",
                       "qual_semiskilled","qual_degree","qual_unskilled","qual_wo_degree",
                       "swiss","ue_cw_allocation1","ue_cw_allocation2","ue_cw_allocation3","ue_cw_allocation4",
-                      "ue_cw_allocation5","ue_cw_allocation6","ue_spells_last_2yrs","unemp_rate")
+                      "ue_cw_allocation5","ue_cw_allocation6","ue_spells_last_2yrs","unemp_rate"
+                      )
 
-risk_exit12_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no",
+risk_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no",
                    "emp_share_last_2yrs","emp_spells_5yrs",
                    "female","foreigner_b","foreigner_c","gdp_pc","married","other_mother_tongue","past_income",
                    "prev_job_manager","prev_job_sec_mis","prev_job_sec1","prev_job_sec2",
                    "prev_job_sec3","prev_job_self","prev_job_skilled","prev_job_unskilled",
                    "qual_semiskilled","qual_degree","qual_unskilled","qual_wo_degree",
-                   "swiss","ue_spells_last_2yrs","unemp_rate", 
-                   "y_exit12")
+                   "swiss","ue_spells_last_2yrs","unemp_rate"
+                   )
 
 treatments_list <- c("no program", "vocational", "computer", "language", "job search", "employment", "personality")
 

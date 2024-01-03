@@ -103,6 +103,7 @@ f_pseudo_random_starting <- function(df, var_list, seed=12345) {
   # remove those that are employed at the pseudo starting point
   df <- df %>% 
     filter(!(df$elap == 1 & (df$employed1 == 1 | df$employed2 == 1 | df$employed3 == 1)))
+  # TODO add count how many people are dropped 
   
   return(df)
 }

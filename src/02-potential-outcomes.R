@@ -159,7 +159,7 @@ f_ipw <- function(w_mat, nui_prop) {
   for (i in 1:ncol(w_mat)) {
     
     ipw[,i] = w_mat[,i] / nui_prop[,i]
-    # norm 1 normalisation
+    # TODO norm 1 normalisation
     ipw[,i] = ipw[,i] / (sum(ipw[,i]) * nrow(w_mat))
   }
   
@@ -389,6 +389,7 @@ cDML <- f_cDML(db, treatments_list, effects_var_list, outcome)
 summary(cDML$ATE)
 
 ndr <- f_ndr_learner(db, treatments_list, effects_var_list, outcome)
+# TODO Fehler: honest fraction too close to 1 or 0
 
 # ---------------------------------------------------------------------------- #
 # End

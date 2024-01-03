@@ -418,14 +418,91 @@ f_program_2_iapo <- function(df, new_outcome_name) {
 
 # ---------------------------------------------------------------------------- #
 
-test <- f_alg_policy(db, "Austrian", "risk_log", "min", "lower", "p_a_log_min_lower")
+for (i in 1:6) {
+  
+  policy <- paste0("policy", i)
+  db <- f_alg_policy(db, policy[1], policy[2], "min", policy[4], policy[5])
+}
+
 
 # TODO test what happens if function is called again on exact same parameters 
 # TODO does random/prop-score weighted assignment required several runs and averaging? 
+policy_style <- c("Belgian", "Austrian")
+risk_scores <- c("risk_score_logistic")
+assignment_style <- c("upper", "emp", "lower")
+policy_names <- 
 
 
+policy_list <- list(
+  policy01 <- c("Belgian", "risk_score_logistic", "min", "upper", "p_b_log_min_upper"),
+  policy02 <- c("Belgian", "risk_score_logistic", "min", "emp", "p_b_log_min_emp"),
+  policy03 <- c("Belgian", "risk_score_logistic", "min", "lower", "p_b_log_min_lower"),
+  
+  policy04 <- c("Austrian", "risk_score_logistic", "min", "upper", "p_a_log_min_upper"),
+  policy05 <- c("Austrian", "risk_score_logistic", "min", "emp", "p_a_log_min_emp"),
+  policy06 <- c("Austrian", "risk_score_logistic", "min", "lower", "p_a_log_min_lower"),
+)
 
 
+test <- f_alg_policy(test, policy05[1], policy05[2], "min", policy05[4], policy05[5])
+
+write.csv(test, file="data/1203_ALMP_Sample_Simulations_Test.csv")
+
+# ---------------------------------------------------------------------------- #
+# analysis
+# ---------------------------------------------------------------------------- #
+mean(test$y_exit12)
+
+# gender
+# ---------------------------------------------------------------------------- #
+mean(test$y_exit12[test$female==0])
+mean(test$y_exit12[test$female==1])
+
+# Belgian
+mean(test$iapo_p_b_log_min_upper[test$female==0])
+mean(test$iapo_p_b_log_min_upper[test$female==1])
+
+mean(test$iapo_p_b_log_min_emp[test$female==0])
+mean(test$iapo_p_b_log_min_emp[test$female==1])
+
+mean(test$iapo_p_b_log_min_lower[test$female==0])
+mean(test$iapo_p_b_log_min_lower[test$female==1])
+
+# Austrian
+mean(test$iapo_p_a_log_min_upper[test$female==0])
+mean(test$iapo_p_a_log_min_upper[test$female==1])
+
+mean(test$iapo_p_a_log_min_emp[test$female==0])
+mean(test$iapo_p_a_log_min_emp[test$female==1])
+
+mean(test$iapo_p_a_log_min_lower[test$female==0])
+mean(test$iapo_p_a_log_min_lower[test$female==1])
+
+
+# citizenship
+# ---------------------------------------------------------------------------- #
+mean(test$y_exit12[test$swiss==0])
+mean(test$y_exit12[test$swiss==1])
+
+# Belgian
+mean(test$iapo_p_b_log_min_upper[test$swiss==0])
+mean(test$iapo_p_b_log_min_upper[test$swiss==1])
+
+mean(test$iapo_p_b_log_min_emp[test$swiss==0])
+mean(test$iapo_p_b_log_min_emp[test$swiss==1])
+
+mean(test$iapo_p_b_log_min_lower[test$swiss==0])
+mean(test$iapo_p_b_log_min_lower[test$swiss==1])
+
+# Austrian
+mean(test$iapo_p_a_log_min_upper[test$swiss==0])
+mean(test$iapo_p_a_log_min_upper[test$swiss==1])
+
+mean(test$iapo_p_a_log_min_emp[test$swiss==0])
+mean(test$iapo_p_a_log_min_emp[test$swiss==1])
+
+mean(test$iapo_p_a_log_min_lower[test$swiss==0])
+mean(test$iapo_p_a_log_min_lower[test$swiss==1])
 
 
 # ---------------------------------------------------------------------------- #
