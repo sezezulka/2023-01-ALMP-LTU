@@ -1,270 +1,348 @@
 # ---------------------------------------------------------------------------- #
-# estimate potential outcomes
+# 02-Estimate potential outcomes
 # ---------------------------------------------------------------------------- #
 
 library(devtools)
-# install_github(repo="MCKnaus/causalDML")
 library(causalDML)
 library(policytree)
 
 # ---------------------------------------------------------------------------- #
-
 # set working directory 
-setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+setwd(wd_path)
 
 source("src/01-prepare-data.R")
+set.seed(seed)
 
 # ---------------------------------------------------------------------------- #
+# Preparations
+# ---------------------------------------------------------------------------- #
 
-# create methods
-mean = create_method("mean")
-forest = create_method("forest_grf", 
-                   args=list(tune.parameters = "all", seed=seed))
+f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv=4) {
+  
+  #############################################################
+  # 
+  # Estimation of IAPOs, IATEs from DR Scores.
+  #
+  # df :              Dataset.
+  # treatments_list : List of treatments. 
+  # var_list :        List of variable names for covariate matrix.
+  # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
+  # -x- bound_list -x- : List of (Boolean, upper, and lower limit).
+  # cv :              Number of cross-validations, default = 4.
+  #
+  #############################################################
+  
+  # tests
+  # outcome_name <- as.character(outcome_name)
+  # stopifnot(is.character(outcome_name), 
+  #           "Name of outcome variable must be character.")
+  # 
+  # if (length(bound_list) == 3) {
+  #   bound_outcomes <- as.character(bound_list[[1]])
+  #   up <- as.numeric(bound_list[[2]])
+  #   low <- as.numeric(bound_list[[3]])
+  #   
+  #   } else {
+  #     stop("Error: List must have three elements.")
+  #     
+  #   }
+  # 
+  # stopifnot(is.logical(bound_outcomes), 
+  #           "First element in bound_list must be Boolean.")
+    
+  # create treatment
+  w = df$treatment6
+  w = factor(w, 
+             treatments_list)
+  
+  # preparation
+  wm = prep_w_mat(w)
+  cfm = prep_cf_mat(nrow(df), 
+                    cv, 
+                    wm)
+  x <- data.matrix(df[,var_list])
+  y <- df[,outcome_name]
+  
+  # create methods
+  forest = create_method("forest_grf",
+                         args=list(tune.parameters = "all",
+                                   seed=seed))
+  mean = create_method("mean")
+  
+  # estimate propensity scores
+  em = nuisance_e(list(forest),
+                  wm, 
+                  x, 
+                  cfm, 
+                  cv=cv, 
+                  path=NULL, 
+                  quiet=FALSE)
 
-# preparation 
-no_cv = 4
-wm = prep_w_mat(w)
-cfm = prep_cf_mat(length(y_exit12), no_cv, wm)
+  # estimate outcomes
+  mm = nuisance_m(list(forest),
+                  y, 
+                  wm, 
+                  x, 
+                  cfm, 
+                  cv=cv, 
+                  path=NULL, 
+                  quiet=FALSE, 
+                  weights=FALSE)
 
-# TODO why not nuisance_dss_e and nuisance_dss_m?
-
-# propensity
-em = nuisance_e(list(forest),
-                wm, x, cfm, 
-                cv=no_cv, 
-                path=NULL, 
-                quiet=FALSE)
-summary(em)
-
-# estimate outcomes
-mm = nuisance_m(list(forest),
-                y_exit12, wm, x, cfm, 
-                cv=no_cv, 
-                path=NULL, 
-                quiet=FALSE, 
-                weights=FALSE)
-summary(mm)
-
-# DR scores
-ipw = matrix(0, nrow(wm), ncol(wm))
-gamma = matrix(NA, nrow(wm), ncol(wm))
-
-for (i in 1:ncol(wm)) {
-  ipw[,i] = wm[,i] / em[,i]
-  # norm = 1
-  # TODO important?
-  ipw[,i] = ipw[,i] / (sum(ipw[,i]) * nrow(wm))
+  # estimate DR scores
+  dr_scores <- f_dr_scores(wm, 
+                           em, 
+                           mm, 
+                           y)
+  
+  # estimate smoothed IAPOs
+  bound_list <- list(TRUE, 1, 0)
+  theta <- f_smoothed_iapos(wm, 
+                            dr_scores$gamma, 
+                            x,
+                            cfm,
+                            cv=cv, 
+                            seed=seed, 
+                            bound_outcomes=bound_list[[1]], 
+                            up=bound_list[[2]], 
+                            low=bound_list[[3]])
+  
+  # estimate IATEs against baseline program
+  baseline_program <- 'no program'
+  iates <- matrix(NA, nrow(wm), ncol(wm)-1)
+  iates <- theta[, -which(colnames(theta) == baseline_program)] - theta[, baseline_program]
+  
+  # update variable names
+  colnames(em) <- gsub(" ", "_", paste0("em_", colnames(em)))
+  colnames(theta) <- gsub(" ", "_", paste0('iapo_', colnames(theta)))
+  colnames(iates) <- gsub(" ", "_", paste0('iate_', colnames(iates)))
+  
+  df <- cbind(df, iates, theta, em)
+  
+  return(df)
 }
 
-for (i in 1:ncol(wm)) {
-  gamma[,i] = mm[,i] + ipw[,i] * (y_exit12 - mm[,i])
+f_dr_scores <- function(w_mat, nui_prop, nui_outcomes, outcomes) {
+  
+  #############################################################
+  #
+  # Estimates DR scores. Returns Gamma 
+  #
+  # w_mat :         Matrix of binary treatment indicators (n x T+1)
+  # nui_prop :      Propensity scores (n x T+1)
+  # nui_outcomes :  Pseudo outcomes per treatment (n x T+1)
+  # outcomes :      Observed outcomes y (n x 1)
+  #
+  #############################################################
+  
+  ipw_mat <- f_ipw(w_mat, nui_prop)
+  gamma <- f_gamma(w_mat, nui_outcomes, ipw_mat, outcomes)
+  
+  return(list(ipw=ipw_mat, gamma=gamma))
+  
 }
 
-
-# cv prediction of debiased outcomes: 
-## check: https://github.com/MCKnaus/causalDML/issues/4#issuecomment-1238095799
-## smooth IAPO predictions 
-
-# TODO why not first bounding and then smoothing?
-
-theta = matrix(NA, nrow(wm), ncol(wm))
-for (i in 1:ncol(wm)) {
-  # cross-validation (theta)
-  t = matrix(NA, nrow(cfm), ncol(cfm))
-
-  for (c in 1:no_cv) {
-    # cross-validation
-    oos = cfm[,c]
-    r.forest <- regression_forest(x[!oos,], gamma[!oos,i], tune.parameters = 'all', seed=seed) # 'none'
-    t[oos,c] <- predict(r.forest, x[oos,])$predictions
-
+f_ipw <- function(w_mat, nui_prop) {
+  
+  #############################################################
+  #
+  # Estimates IPWs, normalised by norm 1.
+  #
+  # w_mat :     matrix of binary treatment indicators (n x T+1)
+  # nui_prop :  Propensity scores (n x T+1)
+  #
+  #############################################################
+  
+  ipw = matrix(0, nrow(w_mat), ncol(w_mat))
+  
+  for (i in 1:ncol(w_mat)) {
+    
+    ipw[,i] = w_mat[,i] / nui_prop[,i]
+    # norm 1 normalisation
+    ipw[,i] = ipw[,i] / (sum(ipw[,i]) * nrow(w_mat))
   }
-  theta[,i] <- rowSums(t, na.rm = TRUE)
-}
-
-
-# ---------------------------------------------------------------------------- #
-# analyse 
-
-# TODO why not plot against gamma? what does this tell?
-# gamma and mm are perfectly aligned! regression works...
-# for theta, mm:
-# 6, 7 are negatively correlated!
-# 1, 4, 5 seem ok
-# 2, 3 fan out for higher values 
-
-for (i in 1:7) {
-  x_label <- paste0("theta_", i)
-  y_label <- paste0("mm_", i)
-  title_plot <- paste0("IAPOs vs. Nuisance Outcome, program ", i)
-  title_hist <- paste0("Histogram IAPO scores, program ", i)
   
-  plot(theta[,i], mm[,i],
-       xlab=x_label, 
-       ylab=y_label,
-       main=title_plot)
+  colnames(ipw) <- colnames(w_mat)
   
-  hist(theta[,i], breaks=100, 
-       xlim=c(0,1),
-       main=title_hist,
-       xlab=x_label)
-  # TODO not nice, plots on top of each other!
+  return(ipw)
 }
 
+f_gamma <- function(w_mat, nui_outcomes, ipw_mat, outcomes) {
+  
+  #############################################################
+  #
+  # Estimates Gamma matrix.
+  #
+  # w_mat :         Matrix of binary treatment indicators (n x T+1)
+  # nui_outcomes :  Pseudo outcomes per treatment (n x T+1)
+  # ipw_mat :       Inverse probability weights (n x T+1)
+  # outcomes :      Observed outcomes y (n x 1)
+  #
+  #############################################################
+  
+  gamma = matrix(NA, nrow(w_mat), ncol(w_mat))
+  
+  for (i in 1:ncol(w_mat)) {
+    
+    gamma[,i] = nui_outcomes[,i] + ipw_mat[,i] * (outcomes - nui_outcomes[,i])
+  }
+  
+  colnames(gamma) <- colnames(w_mat)
+  
+  return(gamma)
+}
 
+f_smoothed_iapos <- function(w_mat, gamma, x, cfm, cv=4, seed=12345, bound_outcomes=TRUE, up=1, low=0) {
+  
+  #############################################################
+  # 
+  # Returns smoothed individualised average potential outcomes from Gamma.
+  # check: https://github.com/MCKnaus/causalDML/issues/4#issuecomment-1238095799
+  #
+  # w_mat :           Matrix of binary treatment indicators (n x T+1)
+  # gamma :           Matrix of DR potential outcomes (n x T+1)
+  # x :               Covariate matrix (n x d)
+  # cfm :             Matrix of binary cross-fitting fold indicators (n x # cross-folds).
+  # cv :              Number of cross-validations, default = 4.
+  # seed :            Seed, default = 12345.
+  # bound_outcomes :  Boolean: True if results are to be bounded in range.
+  # up :              Upper bound of range.
+  # low :             Lower bound of range.
+  #
+  #############################################################
+  
+  # cfm = prep_cf_mat(nrow(w_mat), cv, w_mat)
+  theta = matrix(NA, nrow(w_mat), ncol(w_mat))
+  
+  for (i in 1:ncol(w_mat)) {
+    
+    # cross-validation (theta)
+    t = matrix(NA, nrow(cfm), ncol(cfm))
+    
+    for (c in 1:cv) {
+      oos = cfm[,c]
+      r.forest <- regression_forest(x[!oos,], 
+                                    gamma[!oos,i], 
+                                    tune.parameters = 'all', 
+                                    seed=seed) 
+      t[oos,c] <- predict(r.forest, x[oos,])$predictions
+      
+    }
+    theta[,i] <- rowSums(t, na.rm = TRUE)
+    
+    cat('Variable:', i, 'of', ncol(w_mat), '.\n')
+  }
+  
+  if (bound_outcomes==TRUE) {
+    theta <- f_bound_outcomes(theta, up, low)
+  }
+  
+  colnames(theta) <- colnames(w_mat)
+  return(theta)
+}
 
-# ---------------------------------------------------------------------------- #
-
-# ggplot(as.data.frame(theta), aes(x=V1)) +
-#   geom_histogram(color="black", fill="#ffffff", bins = 100) +
-#   theme_bw() + xlab("risk") + ylab("") + theme(text = element_text(size=16)) +
-#   geom_vline(xintercept = 0, color = "#ff9933", lwd = .75) +
-#   geom_vline(xintercept = 1, color = "#ff9933", lwd = .75)
-# 
-# ggsave(file = "plots/appendix/iapo_np.png", width = 6, height = 4, units = 'in')
-# 
-# ggplot(as.data.frame(theta_original), aes(x=V2)) + 
-#   geom_histogram(color="black", fill="#ffffff", bins = 100) +
-#   theme_bw() + xlab("risk") + ylab("") + theme(text = element_text(size=16)) +
-#   geom_vline(xintercept = 0, color = "#ff9933", lwd = .75) + 
-#   geom_vline(xintercept = 1, color = "#ff9933", lwd = .75)
-# 
-# ggsave(file = "plots/appendix/iapo_pc.png", width = 6, height = 4, units = 'in')
-# 
-# ggplot(as.data.frame(theta_original), aes(x=V3)) + 
-#   geom_histogram(color="black", fill="#ffffff", bins = 100) +
-#   theme_bw() + xlab("risk") + ylab("") + theme(text = element_text(size=16)) +
-#   geom_vline(xintercept = 0, color = "#ff9933", lwd = .75) + 
-#   geom_vline(xintercept = 1, color = "#ff9933", lwd = .75)
-# 
-# ggsave(file = "plots/appendix/iapo_lg.png", width = 6, height = 4, units = 'in')
-# 
-# ggplot(as.data.frame(theta_original), aes(x=V4)) + 
-#   geom_histogram(color="black", fill="#ffffff", bins = 100) +
-#   theme_bw() + xlab("risk") + ylab("") + theme(text = element_text(size=16)) +
-#   geom_vline(xintercept = 0, color = "#ff9933", lwd = .75) + 
-#   geom_vline(xintercept = 1, color = "#ff9933", lwd = .75)
-# 
-# ggsave(file = "plots/appendix/iapo_vc.png", width = 6, height = 4, units = 'in')
-
-# ---------------------------------------------------------------------------- #
-# save original theta's
-theta_original <- theta
-
-# test whether results are outside of effect range [0, 1]
-apply(theta, 2, function(x) sum(x < 0))
-apply(theta, 2, function(x) sum(x > 1))
-
-# bound the outcome
-for (i in 1:ncol(wm)) {
-  theta[,i][theta[,i] > 1] <- 1
-  theta[,i][theta[,i] < 0] <- 0
+f_bound_outcomes <- function(iapo_mat, up=1, low=0) {
+  
+  #############################################################
+  # 
+  # Bounds results in range [0, 1]
+  # 
+  # iapo_mat :  Matrix of estimated/smoothed IAPOs.
+  # up :        Upper bound, default = 1.
+  # low :       Lower bound, default = 0.
+  #
+  #############################################################
+  
+  # count how many outcomes are outside of specified effect range
+  num_up <- apply(iapo_mat, 2, function(x) sum(x > up))
+  num_low <- apply(iapo_mat, 2, function(x) sum(x < low))
+  
+  cat('Number of outcomes larger than ', up, ': ', num_up, '\n')
+  cat('Number of outcomes smaller than ', low, ': ', num_low, '\n')
+  
+  # bound the outcomes outside of range
+  for (i in 1:ncol(iapo_mat)) {
+    iapo_mat[,i][iapo_mat[,i] > up] <- up
+    iapo_mat[,i][iapo_mat[,i] < low] <- low
+  }
+  
+  return(iapo_mat)
 }
 
 # ---------------------------------------------------------------------------- #
-# add results to data
+# Potential Outcomes
+# ---------------------------------------------------------------------------- #
 
-# potential outcomes
-db$iapo_no_program  <- theta[,1]
-db$iapo_vocational  <- theta[,2]
-db$iapo_computer  <- theta[,3] # not in Knaus
-db$iapo_language  <- theta[,4]
-db$iapo_job_search    <- theta[,5]
-db$iapo_employment <- theta[,6]
-db$iapo_personality <- theta[,7] # not in Knaus
+outcome <- 'y_exit12'
+no_cv <- 4
+db <- f_potential_outcomes(db, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
 
-# IATEs against no_program
-db$iate_vocational  <- theta[,2] - theta[,1]
-db$iate_computer  <- theta[,3] - theta[,1]
-db$iate_language    <- theta[,4] - theta[,1]
-db$iate_job_search  <- theta[,5] - theta[,1]
-db$iate_employment    <- theta[,6] - theta[,1]
-db$iate_personality <- theta[,7] - theta[,1]
+# analyse
+db %>% select(starts_with('iate_')) %>% summary(., mean())
+db %>% select(starts_with('iapo_')) %>% summary(., mean())
 
-# propensity scores
-db$em_no_program <- em[,1]
-db$em_vocational <- em[,2]
-db$em_computer <- em[,3]
-db$em_language <- em[,4]
-db$em_job_search <- em[,5]
-db$em_employment <- em[,6]
-db$em_personality <- em[,7]
 
 # ---------------------------------------------------------------------------- #
 # save
-write.csv(db, file="data/almp_effects.csv")
+write.csv(db, file="data/1203_ALMP_Sample_IATEs.csv")
+# ---------------------------------------------------------------------------- #
+
 
 
 # ---------------------------------------------------------------------------- #
 # analyse results
 # ---------------------------------------------------------------------------- #
 
-db %>% select(starts_with('iate_')) %>% summary(., mean())
-db %>% select(starts_with('iapo_')) %>% summary(., mean())
+f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
+  
+  #############################################################
+  # 
+  # Estimation of APOs and ATEs from CausalDML package.
+  #
+  # df :              Dataset.
+  # treatments_list : List of treatments. 
+  # var_list :        List of variable names for covariate matrix.
+  # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
+  # cv :              Number of cross-validations, default = 4.
+  #
+  #############################################################
+    
+  # create treatment
+  w = df$treatment6
+  w = factor(w, 
+             treatments_list)
+  
+  # preparation
+  wm = prep_w_mat(w)
+  cfm = prep_cf_mat(nrow(df), 
+                    cv, 
+                    wm)
+  x <- data.matrix(df[,var_list])
+  y <- df[,outcome_name]
+  
+  # create methods
+  forest = create_method("forest_grf",
+                         args=list(tune.parameters = "all",
+                                   seed=seed))
+  mean = create_method("mean")
 
-# TODO estimate IATEs from IAPO scores and compare with ndr_learner results as check! 
+  # estimation
+  cDML = DML_aipw(y,
+                  w,
+                  x,
+                  ml_w=list(forest),
+                  ml_y=list(forest),
+                  quiet=FALSE
+                  )
+  
+  return(cDML)
+}
+
+
+cDML <- f_cDML(db, treatments_list, effects_var_list, outcome)
 
 
 # ---------------------------------------------------------------------------- #
-# potential outcomes and treatment effects
-## Run the main function that outputs nuisance parameters, APO and ATE
-
-cDML = DML_aipw(y_exit12,
-                w,
-                x,
-                ml_w=list(forest),
-                ml_y=list(forest),
-                quiet=FALSE
-                )
-
-# comparision
-summary(cDML$APO)
-plot(cDML$APO)
-
-print(colMeans(gamma))
-print(colMeans(theta))
-
-# 
-summary(cDML$ATE)
-
-## (N)DR-learner
-ndr = ndr_learner(y_exit12,
-                  w,
-                  x,
-                  ml_w = list(forest),
-                  ml_y = list(forest),
-                  ml_tau = list(forest),
-                  quiet=FALSE,
-                  compare_all = FALSE)
-
-# # get APO estimates from one fold?
-# # ndr$list[[1]]$APO$m_mat
-# 
-# ndr_cates <- ndr$cates[1:6, , 2]
-# 
-# # bound the outcome
-# for (i in 1:ncol(wm)) {
-#   ndr$cates[i,,2][ndr$cates[i,,2] > 1] <- 1
-#   ndr$cates[i,,2][ndr$cates[i,,2] < 0] <- 0
-# }
-# 
-# # Plot the results
-# label_w = levels(w)
-# df_box = NULL
-# for (i in 1:6) {
-#   df = data.frame("DRL" = ndr$cates[i,,1], "NDRL" = ndr$cates[i,,2])
-#   df = gather(df)
-#   df = cbind(label_w[i+1],df)
-#   colnames(df)[1] = "label"
-#   df_box = rbind(df_box,df)
-# }
-# ggplot(data=df_box) + geom_boxplot( aes(x=factor(label,label_w[-1]),y=value,fill=key)) +
-#   theme_bw() + theme(axis.title.x=element_blank(),legend.title = element_blank()) +
-#   ylab("Individualized average treatment effect") + geom_hline(yintercept = 0) + geom_hline(yintercept = -1,linetype="dashed") +
-#   geom_hline(yintercept = 1,linetype="dashed") +
-#   theme(text=element_text(family="serif",size = 16, colour="black"),axis.text.x = element_text(angle = 45, hjust = 1)) + 
-#   scale_fill_grey(start = 0.9,end=0.4)
-
-
-
-
+# End
+# ---------------------------------------------------------------------------- #

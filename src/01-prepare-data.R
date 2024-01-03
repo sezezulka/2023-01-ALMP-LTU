@@ -1,145 +1,175 @@
 # ---------------------------------------------------------------------------- #
-# Data Preparation
-#
+# 01-Data Preparation
+# ---------------------------------------------------------------------------- #
+# 
 # Sources:
+# - Knaus (2022)
 # https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/code/
 # Data_preparation_MCK2020.R
+# - Körtner and Bach (2023)
+#
 # ---------------------------------------------------------------------------- #
 
 # set working directory 
-setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+setwd(wd_path)
 
+# load config 
+source("src/00-utils.R")
+
+# libraries
 library(tidyverse)
 library(grf)
 
-seed = 12345
+# set seed
 set.seed(seed)
+# TODO .Random.seed[1] does not reflect seed!
+# check if seed is used correctly 
 
 # read data
-db = read.csv("data/swissubase_1203_1_0/1203_ALMP_Data_E_v1.0.0.csv")
-db$ID <- seq_along(db[,1])
+db = read.csv(raw_data_path)
 
 # ---------------------------------------------------------------------------- #
-
-# remove non German speaking cantons 
-db <- db %>% 
-  filter(canton_german == 1) %>%
-  # filter(!(treatment6 == "employment" | treatment6 == "personality" | treatment6 == "job search")) %>% 
-  # select 30% random sample
-  slice_sample(prop = 0.3)
-
-# get covariate matrix
-x <- as.matrix(select(db, 
-                     age,canton_moth_tongue,city_big,city_medium,city_no,cw_age,cw_cooperative,
-                     cw_educ_above_voc,cw_educ_tertiary,cw_female,cw_missing,cw_own_ue,cw_tenure,
-                     cw_voc_degree,emp_share_last_2yrs,emp_spells_5yrs,employability,female,foreigner_b,foreigner_c,
-                     gdp_pc,married,other_mother_tongue,past_income,prev_job_manager,prev_job_sec_mis,prev_job_sec1,
-                     prev_job_sec2,prev_job_sec3,prev_job_self,prev_job_skilled,prev_job_unskilled,qual_semiskilled,
-                     qual_degree,qual_unskilled,qual_wo_degree,swiss,ue_cw_allocation1,ue_cw_allocation2,ue_cw_allocation3,
-                     ue_cw_allocation4,ue_cw_allocation5,ue_cw_allocation6,ue_spells_last_2yrs,unemp_rate))
-
-
+# Functions
 # ---------------------------------------------------------------------------- #
-# assign pseudo random starting
-rf_late = regression_forest(x[db$treatment6 != "no program",], 
-                            db$start_q2[db$treatment6 != "no program"], 
-                            tune.parameters = "all", seed = seed)
-p_late = predict(rf_late,x[db$treatment6 == "no program",])
 
-# generate pseudo starting point for those in no program
-db$elap = db$start_q2
-db$elap[db$treatment6 == "no program"] = 0 + rbernoulli(sum(db$treatment6 == "no program"), p_late)
-table(db$elap)
-
-# remove those that are employed at the pseudo starting point
-db = db %>% 
-  filter(!(db$elap == 1 & (db$employed1 == 1 | db$employed2 == 1 | db$employed3 == 1)))
-
-
-# ---------------------------------------------------------------------------- #
-# outcome y_emp: months in employment 31 months after treatment start
-emp <- matrix(NA, nrow(db), 31)
-emp[db$elap == 0,] <- as.matrix(db[db$elap == 0, c(sprintf("employed%s", seq(3,33)))])
-emp[db$elap == 1,] <- as.matrix(db[db$elap == 1, c(sprintf("employed%s", seq(6,36)))])
-db$y_emp = rowSums(emp)
-
-# outcome y_unemp: duration of unemployment (month of exit)
-db$y_unemp = db$employed1
-
-for (i in 2:36) {
-  x <- paste0('employed', i)
-  db[db[[x]] == 1, x] <- i
+f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, seed=12345) {
+  
+  #############################################################
+  # 
+  # Pre-processing of data frame. 
+  # Add original ID, remove non German speaking cantons, keep specified programs, 
+  # create 30% sample.
+  # Create pseudo random starting points.
+  # Create outcome variables.
+  #
+  # df :                Dataset
+  # treatment_list :    List of treatments to be kept. 
+  # var_list :          List of variables for covariate matrix.
+  # random_sample :     Boolean, true if df is reduced to 30% sample.
+  # seed :              Seed, default = 12345.
+  # 
+  #############################################################
+  
+  df <- df %>%
+    mutate(ID = row_number()) %>%
+    select(ID, dplyr::everything()) %>%
+    filter(canton_german == 1) %>%
+    filter(treatment6 %in% treatment_list)
+  
+  if (random_sample==TRUE) {
+    set.seed(seed = seed)
+    df <- df %>%
+      slice_sample(prop = 0.3)
+  }
+  
+  df <- f_pseudo_random_starting(df, var_list, seed = seed)
+  
+  df <- f_create_outcomes(df)
+  
+  return(df)
 }
 
-for (i in 2:36) {
-  x <- paste0('employed', i)
-  db$y_unemp <- ifelse(db$y_unemp == 0, db[, x], db$y_unemp)
+f_pseudo_random_starting <- function(df, var_list, seed=12345) {
+  
+  #############################################################
+  # 
+  # Generate pseudo random program starting points for those in "no program".
+  #
+  # df :          Dataset, requires variables "treatment6" and "start_q2"
+  # var_list :    List of variable names for covariate matrix.
+  # seed :        Seed, default = 12345.
+  #
+  # Note coded treatment6 and start_q2 variables!
+  #
+  #############################################################
+  
+  # make covariate matrix
+  x <- data.matrix(df[,var_list])
+  
+  # assign pseudo random starting
+  rf_late = regression_forest(x[df$treatment6 != "no program",], 
+                              df$start_q2[df$treatment6 != "no program"], 
+                              tune.parameters = "all", 
+                              seed = seed)
+  p_late = predict(rf_late,
+                   x[df$treatment6 == "no program",])
+  
+  # generate pseudo starting point for those in no program
+  df$elap = df$start_q2
+  df$elap[df$treatment6 == "no program"] = 0 + rbernoulli(sum(df$treatment6 == "no program"), p_late)
+  # table(df$elap)
+  
+  # remove those that are employed at the pseudo starting point
+  df <- df %>% 
+    filter(!(df$elap == 1 & (df$employed1 == 1 | df$employed2 == 1 | df$employed3 == 1)))
+  
+  return(df)
 }
 
-db$y_unemp <- ifelse(db$y_unemp == 0, 37, db$y_unemp)
+f_create_outcomes <- function(df) {
+  
+  #############################################################
+  #
+  # Create outcome variables, y. Returns df.
+  #
+  # df :    Dataset.
+  # 
+  #############################################################
+  
+  if (!("elap" %in% names(df))) {
+    stop("Error: Variable \"elap\" from pseudo random starting required.")
+  }
+  
+  if ("y_emp" %in% names(df)) {
+    stop("Error: Do not apply function twice.")
+  }
+  
+  # 1. outcome y_emp: 
+  # months in employment in 31 months after treatment start
+  emp <- matrix(NA, nrow(df), 31)
+  
+  emp[df$elap == 0,] <- as.matrix(df[df$elap == 0, c(sprintf("employed%s", seq(3,33)))])
+  emp[df$elap == 1,] <- as.matrix(df[df$elap == 1, c(sprintf("employed%s", seq(6,36)))])
+  df$y_emp = rowSums(emp)
+  
+  # 2. outcome y_unemp: 
+  # duration of first unemployment spell (first month of employment or 37)
+  df$y_unemp <- df$employed1
+  
+  for (i in 2:36) {
+    temp_var_name <- paste0('employed', i)
+    df[df[[temp_var_name]] == 1, temp_var_name] <- i
+  }
+  
+  for (i in 2:36) {
+    temp_var_name <- paste0('employed', i)
+    df$y_unemp <- ifelse(df$y_unemp == 0, df[, temp_var_name], df$y_unemp)
+  }
+  
+  df$y_unemp <- ifelse(df$y_unemp == 0, 37, df$y_unemp)
+  df$y_unemp <- df$y_unemp - 1
+  
+  # 3. outcome y_exit12: 
+  # long-term unemployment (12 month unemployment after (pseudo) program start)
+  # TODO discuss!
+  df$y_exit12[df$elap == 0] <- ifelse(df$y_unemp[df$elap == 0] > 15, 1, 0)
+  df$y_exit12[df$elap == 1] <- ifelse(df$y_unemp[df$elap == 1] > 18, 1, 0)
+  
+  # original from Körtner/Bach
+  # df$y_exit12 <- ifelse(df$y_unemp > 12, 1, 0)
+  
+  return(df)
+}
 
-# outcome y_exit12: becoming LTU
-db$y_exit12 <- ifelse(db$y_unemp > 12, 1, 0)
-
-# outcome variables
-y_exit12 <- db$y_exit12
-y_emp <- db$y_emp
-y_unemp <- db$y_unemp
-
-# ---------------------------------------------------------------------------- #
-# create treatment
-w = db$treatment6
-w = factor(w, c("no program","vocational","computer","language", "job search", "employment", "personality"))
-
-# variable labels for covariate matrix x
-label_x = c("Age","Mother tongue in canton's language","Lives in big city","Lives in medium city",
-            "Lives in no city","Caseworker age","Caseworker cooperative","Caseworker education: above vocational training",
-            "Caseworker education: tertiary track","Caseworker female","Missing caseworker characteristics",
-            "Caseworker has own unemployemnt experience","Caseworker tenure","Caseworker education: vocational degree",
-            "Fraction of months employed last 2 years","Number of employment spells last 5 years","Employability",
-            "Female","Foreigner with temporary permit","Foreigner with permanent permit","Cantonal GDP p.c.",
-            "Married","Mother tongue other than German, French, Italian","Past income","Previous job: manager",
-            "Missing sector","Previous job in primary sector","Previous job in secondary sector","Previous job in tertiary sector",
-            "Previous job: self-employed","Previous job: skilled worker","Previous job: unskilled worker","Qualification: semiskilled",
-            "Qualification: some degree","Qualification: unskilled","Qualification: skilled without degree","Swiss citizen",
-            "Allocation of unemployed to caseworkers: by industry","Allocation of unemployed to caseworkers: by occupation",
-            "Allocation of unemployed to caseworkers: by age","Allocation of unemployed to caseworkers: by employability",
-            "Allocation of unemployed to caseworkers: by region","Allocation of unemployed to caseworkers: other",
-            "Number of unemployment spells last 2 years","Cantonal unemployment rate (in %)")
-
-
-# covariate matrix for risk score covariate matrix
-x_risk = as.matrix(select(db, 
-                     age,canton_moth_tongue,city_big,city_medium,city_no,
-                     emp_share_last_2yrs,emp_spells_5yrs,female,foreigner_b,foreigner_c,
-                     gdp_pc,married,other_mother_tongue,past_income,prev_job_manager,prev_job_sec_mis,prev_job_sec1,
-                     prev_job_sec2,prev_job_sec3,prev_job_self,prev_job_skilled,prev_job_unskilled,qual_semiskilled,
-                     qual_degree,qual_unskilled,qual_wo_degree,swiss,
-                     ue_spells_last_2yrs,unemp_rate))
-
-# variable labels for x_risk
-label_x_risk = c("Age","Mother tongue in canton's language","Lives in big city","Lives in medium city",
-            "Lives in no city",
-            "Fraction of months employed last 2 years","Number of employment spells last 5 years",
-            "Female","Foreigner with temporary permit","Foreigner with permanent permit","Cantonal GDP p.c.",
-            "Married","Mother tongue other than German, French, Italian","Past income","Previous job: manager",
-            "Missing sector","Previous job in primary sector","Previous job in secondary sector","Previous job in tertiary sector",
-            "Previous job: self-employed","Previous job: skilled worker","Previous job: unskilled worker","Qualification: semiskilled",
-            "Qualification: some degree","Qualification: unskilled","Qualification: skilled without degree","Swiss citizen",
-            "Number of unemployment spells last 2 years","Cantonal unemployment rate (in %)")
-
-# variable lables for risk estimation including outcome y_exit12
-label_risk = c("Age","Mother tongue in canton's language","Lives in big city","Lives in medium city",
-               "Lives in no city",
-               "Fraction of months employed last 2 years","Number of employment spells last 5 years",
-               "Female","Foreigner with temporary permit","Foreigner with permanent permit","Cantonal GDP p.c.",
-               "Married","Mother tongue other than German, French, Italian","Past income","Previous job: manager",
-               "Missing sector","Previous job in primary sector","Previous job in secondary sector","Previous job in tertiary sector",
-               "Previous job: self-employed","Previous job: skilled worker","Previous job: unskilled worker","Qualification: semiskilled",
-               "Qualification: some degree","Qualification: unskilled","Qualification: skilled without degree","Swiss citizen",
-               "Number of unemployment spells last 2 years","Cantonal unemployment rate (in %)", "y_exit12")
 
 # ---------------------------------------------------------------------------- #
-# clean
-rm(label_x, p_late, rf_late, emp)
+# Preprocessing
+# ---------------------------------------------------------------------------- #
+
+db <- f_preprocessing(db, treatments_list, effects_var_list, random_sample=TRUE, seed=seed)
+
+
+# ---------------------------------------------------------------------------- #
+# End
 # ---------------------------------------------------------------------------- #
