@@ -270,30 +270,6 @@ f_bound_outcomes <- function(iapo_mat, up=1, low=0) {
   return(iapo_mat)
 }
 
-# ---------------------------------------------------------------------------- #
-# Potential Outcomes
-# ---------------------------------------------------------------------------- #
-
-outcome <- 'y_exit12'
-no_cv <- 4
-db <- f_potential_outcomes(db, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
-
-# analyse
-db %>% select(starts_with('iate_')) %>% summary(., mean())
-db %>% select(starts_with('iapo_')) %>% summary(., mean())
-
-
-# ---------------------------------------------------------------------------- #
-# save
-write.csv(db, file="data/1203_ALMP_Sample_IATEs.csv")
-# ---------------------------------------------------------------------------- #
-
-
-
-# ---------------------------------------------------------------------------- #
-# analyse results
-# ---------------------------------------------------------------------------- #
-
 f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   
   #############################################################
@@ -304,10 +280,10 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   # treatments_list : List of treatments. 
   # var_list :        List of variable names for covariate matrix.
   # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
-  # cv :              Number of cross-validations, default = 4.
+  # cv :              Number of cross-validation folds, default = 4.
   #
   #############################################################
-    
+  
   # create treatment
   w = df$treatment6
   w = factor(w, 
@@ -326,7 +302,7 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
                          args=list(tune.parameters = "all",
                                    seed=seed))
   mean = create_method("mean")
-
+  
   # estimation
   cDML = DML_aipw(y,
                   w,
@@ -334,14 +310,85 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
                   ml_w=list(forest),
                   ml_y=list(forest),
                   quiet=FALSE
-                  )
+  )
   
   return(cDML)
 }
 
+f_ndr_learner <- function(df, treatments_list, var_list, outcome_name,cv=4) {
+  
+  #############################################################
+  #
+  # (N)DR-learner from causalDML package. 
+  #
+  # df :              Dataset.
+  # treatments_list : List of treatments. 
+  # var_list :        List of variable names for covariate matrix.
+  # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
+  # cv :              Number of cross-validations, default = 4.
+  #
+  #############################################################
+  
+  # create treatment
+  w = df$treatment6
+  w = factor(w, 
+             treatments_list)
+  
+  # preparation
+  x <- data.matrix(df[,var_list])
+  y <- df[,outcome_name]
+  
+  # create methods
+  forest = create_method("forest_grf",
+                         args=list(tune.parameters = "all",
+                                   seed=seed))
+  mean = create_method("mean")
+  
+  # (n)dr learner
+  ndr = ndr_learner(y,
+                    w,
+                    x,
+                    ml_w = list(forest),
+                    ml_y = list(forest),
+                    ml_tau = list(forest),
+                    compare_all = FALSE,
+                    nfolds = cv,
+                    quiet=FALSE,
+  )
+  
+  return(ndr)
+}
+
+# ---------------------------------------------------------------------------- #
+# Potential Outcomes
+# ---------------------------------------------------------------------------- #
+
+outcome <- 'y_exit12'
+no_cv <- 4
+db <- f_potential_outcomes(db, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
+
+# analyse
+db %>% select(starts_with('iate_')) %>% colMeans()
+db %>% select(starts_with('iapo_')) %>% summary(., mean())
+
+  
+# ---------------------------------------------------------------------------- #
+# save
+write.csv(db, file="data/1203_ALMP_Sample_IATEs.csv")
+# ---------------------------------------------------------------------------- #
+
+
+
+# ---------------------------------------------------------------------------- #
+# compare results
+# ---------------------------------------------------------------------------- #
+
 
 cDML <- f_cDML(db, treatments_list, effects_var_list, outcome)
 
+summary(cDML$ATE)
+
+ndr <- f_ndr_learner(db, treatments_list, effects_var_list, outcome)
 
 # ---------------------------------------------------------------------------- #
 # End

@@ -24,7 +24,6 @@ library(grf)
 # set seed
 set.seed(seed)
 # TODO .Random.seed[1] does not reflect seed!
-# check if seed is used correctly 
 
 # read data
 db = read.csv(raw_data_path)
@@ -38,8 +37,8 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, s
   #############################################################
   # 
   # Pre-processing of data frame. 
-  # Add original ID, remove non German speaking cantons, keep specified programs, 
-  # create 30% sample.
+  # Add original ID, remove non German speaking cantons, keep  only specified 
+  # programs, and (optionally) create 30% sample.
   # Create pseudo random starting points.
   # Create outcome variables.
   #
@@ -58,9 +57,10 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, s
     filter(treatment6 %in% treatment_list)
   
   if (random_sample==TRUE) {
-    set.seed(seed = seed)
     df <- df %>%
-      slice_sample(prop = 0.3)
+      group_by(treatment6) %>%
+      slice_sample(prop = 0.3) %>%
+      ungroup()
   }
   
   df <- f_pseudo_random_starting(df, var_list, seed = seed)

@@ -35,8 +35,8 @@ summary_table_treatment <- db %>%
     Obs = n(),
     Share_LTU = mean(y_exit12),
     Share_Women = mean(female),
-    Avg_Age = mean(age),
     Share_Foreign = mean(1 - swiss),
+    Avg_Age = mean(age),
     Avg_Employability = mean(employability),
     Avg_Past_Income = mean(past_income)
   ) %>%
