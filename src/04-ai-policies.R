@@ -219,7 +219,7 @@ f_select_propensity_program_i <- function(df, temp_program_names, i) {
   assigned_program_name <- df %>%
     slice(i) %>%
     select(all_of(temp_program_names)) %>% 
-    mutate(selected_program = sample(names(.), 1, .)) %>%
+    mutate(selected_program = sample(names(.), size=1, replace=FALSE, .)) %>%
     select(selected_program) %>%
     pull()
   
@@ -389,50 +389,71 @@ f_program_2_iapo <- function(df, new_outcome_name) {
 # Simulations
 # ---------------------------------------------------------------------------- #
 
-test <- f_alg_policy(test_db, "Belgian", "risk_score_logistic", "upper", "p_b_log_min_upper_mult2", capacity_mult=2)
-
 test_db <- db %>% 
-  slice_sample(prop=0.1)
+  group_by(treatment6) %>%
+  slice_sample(prop=0.1) %>%
+  ungroup()
 
-policy01 <- c("Belgian", "risk_score_logistic", "upper", "policy_bel_rlog_upper_mult1", 1)
-policy02 <- c("Belgian", "risk_score_logistic", "emp", "p_b_log_min_emp", 1)
-policy03 <- c("Belgian", "risk_score_logistic", "lower", "p_b_log_min_lower", 1)
-
-policy04 <- c("Austrian", "risk_score_logistic", "upper", "p_a_log_min_upper", 1)
-policy05 <- c("Austrian", "risk_score_logistic", "emp", "p_a_log_min_emp", 1)
-policy06 <- c("Austrian", "risk_score_logistic", "lower", "p_a_log_min_lower", 1)
-
-
-
-for (i in 1:6) {
-  
-  policy <- paste0("policy", i)
-  db <- f_alg_policy(db, policy[1], policy[2], "min", policy[4], policy[5])
-}
-
-
-# TODO test what happens if function is called again on exact same parameters 
-# TODO does random/prop-score weighted assignment required several runs and averaging? 
+# policy choices
 policy_style <- c("Belgian", "Austrian")
 risk_scores <- c("risk_score_logistic")
 assignment_style <- c("upper", "emp", "lower")
-policy_names <- 
+capacitiy_multiplier <- seq(1,5)
+
+for (p in policy_style) {
+  for (a in assignment_style) {
+    for (c in capacitiy_multiplier) {
+      
+      policy_name <- paste("policy", p, "rlog", a, c, sep="_")
+      print(paste0("Next policy: ", policy_name))
+      
+      test_db <- f_alg_policy(test_db, p, "risk_score_logistic", a, policy_name, c)
+    }
+  }
+}
+
+# visualise 
+
+# Select variables with a specific prefix
+selected_vars <- grep("iapo_policy_Belgian_rlog_upper", names(test_db), value = TRUE)
+
+# Calculate mean for selected variables
+means_df <- test_db %>%
+  group_by(female) %>%
+  summarise(across(all_of(selected_vars), mean))
+
+# Convert the data to long format for ggplot
+means_long <- means_df %>%
+  tidyr::pivot_longer(cols = starts_with("iapo_policy_"),
+                      names_to = "variable",
+                      values_to = "mean_value") %>%
+  mutate(factor_variable = factor(substring(variable, nchar(variable), nchar(variable))))
+
+# Create a ggplot with points connected by lines
+pre_LTU_f <- mean(test_db$y_exit12[test_db$female==1])
+pre_LTU_m <- mean(test_db$y_exit12[test_db$female==0])
+pre_LTU <- mean(test_db$y_exit12)
+
+ggplot(means_long, aes(x = factor_variable, y = mean_value, color = as.factor(female))) +
+  geom_line(aes(group = female), size = 1) +
+  geom_point(size = 3, position = position_dodge(width = 0.2)) +
+  geom_point(aes(x = 0, y = pre_LTU_f), color = "#00AFBB", size = 3) +  # Custom point
+  geom_point(aes(x = 0, y = pre_LTU_m), color = "#D55E00", size = 3) +  # Custom point
+  geom_point(aes(x = 0, y = pre_LTU), color = "black", size = 3) +  # Custom point
+  labs(title = "Mean of LTU after Belgian/rlog/upper, by Gender",
+       x = "Capacity Multiplier",
+       y = "LTU Share",
+       color = "Gender") +
+  scale_x_discrete(breaks = c("0", levels(means_long$factor_variable)),
+                   labels = c("0", levels(means_long$factor_variable))) +
+  theme_minimal()
+
+# TODO add pre-LTU gap
+# TODO how to combine some of these plots in one?
 
 
-policy_list <- list(
-  policy01 <- c("Belgian", "risk_score_logistic", "min", "upper", "p_b_log_min_upper"),
-  policy02 <- c("Belgian", "risk_score_logistic", "min", "emp", "p_b_log_min_emp"),
-  policy03 <- c("Belgian", "risk_score_logistic", "min", "lower", "p_b_log_min_lower"),
-  
-  policy04 <- c("Austrian", "risk_score_logistic", "min", "upper", "p_a_log_min_upper"),
-  policy05 <- c("Austrian", "risk_score_logistic", "min", "emp", "p_a_log_min_emp"),
-  policy06 <- c("Austrian", "risk_score_logistic", "min", "lower", "p_a_log_min_lower"),
-)
-
-
-test <- f_alg_policy(test, policy05[1], policy05[2], "min", policy05[4], policy05[5])
-
-write.csv(test, file="data/1203_ALMP_Sample_Simulations_Test.csv")
+# ---------------------------------------------------------------------------- #
+write.csv(test_db, file="data/1203_ALMP_Sample_Simulations_Test.csv")
 
 # ---------------------------------------------------------------------------- #
 # analysis
