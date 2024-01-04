@@ -49,6 +49,7 @@ f_risk_logistic_reg <- function(df, var_list, outcome_name, cv=4) {
   temp = matrix(NA, nrow(cfm_risk), ncol(cfm_risk))
   risk_scores = matrix(NA, nrow(df), 1)
   
+  # TODO check cross validation!
   # cross-validation
   for (c in 1:cv) {
     

@@ -33,23 +33,8 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
   #
   #############################################################
   
-  # tests
-  # outcome_name <- as.character(outcome_name)
-  # stopifnot(is.character(outcome_name), 
-  #           "Name of outcome variable must be character.")
-  # 
-  # if (length(bound_list) == 3) {
-  #   bound_outcomes <- as.character(bound_list[[1]])
-  #   up <- as.numeric(bound_list[[2]])
-  #   low <- as.numeric(bound_list[[3]])
-  #   
-  #   } else {
-  #     stop("Error: List must have three elements.")
-  #     
-  #   }
-  # 
-  # stopifnot(is.logical(bound_outcomes), 
-  #           "First element in bound_list must be Boolean.")
+  # checks
+  if (!(is.character(outcome_name))) {stop("Error: Name of outcome variable must be character.")}
     
   # create treatment
   w = df$treatment6
@@ -108,17 +93,18 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
                             up=bound_list[[2]], 
                             low=bound_list[[3]])
   
-  # estimate IATEs against baseline program
+  # get IATEs for baseline program
   baseline_program <- 'no program'
   iates <- matrix(NA, nrow(wm), ncol(wm)-1)
   iates <- theta[, -which(colnames(theta) == baseline_program)] - theta[, baseline_program]
   
   # update variable names
   colnames(em) <- gsub(" ", "_", paste0("em_", colnames(em)))
+  colnames(mm) <- gsub(" ", "_", paste0("mm_", colnames(mm)))
   colnames(theta) <- gsub(" ", "_", paste0('iapo_', colnames(theta)))
   colnames(iates) <- gsub(" ", "_", paste0('iate_', colnames(iates)))
   
-  df <- cbind(df, iates, theta, em)
+  df <- cbind(df, em, mm, iates, theta)
   
   return(df)
 }
@@ -159,7 +145,7 @@ f_ipw <- function(w_mat, nui_prop) {
   for (i in 1:ncol(w_mat)) {
     
     ipw[,i] = w_mat[,i] / nui_prop[,i]
-    # TODO norm 1 normalisation
+    # TODO normalisation
     ipw[,i] = ipw[,i] / (sum(ipw[,i]) * nrow(w_mat))
   }
   
