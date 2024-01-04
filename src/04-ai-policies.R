@@ -20,35 +20,34 @@ db = read.csv(effect_data_path)
 # Functions
 # ---------------------------------------------------------------------------- #
 
-f_alg_policy <- function(df, policy, risk_score, effect_type, assignment_type, new_outcome_name, seed=1234) {
+f_alg_policy <- function(df, policy_name, risk_score_name, assignment_type, new_outcome_name, capacity_mult=1) {
   
   #############################################################
   #
   # Performs algorithmically informed policy for allocation
-  # into ALMPs. Returns dataset with policy allocation.
+  # into ALMPs. Returns dataset with new program allocation.
   #
-  # df :                dataset, including treatment variable ("treatment6"),
-  #                     estimated IAPOs, propensity scores, ...
-  # policy :            string, {Beglian, Austrian}
-  # risk_score :        string, name of risk score to be used
-  # effect_type :       string, {min, max} 
-  # assignment_type :   string, {upper, emp, lower}
-  # new_outcome_name :  string, name of new variable
-  # seed :              set seed
+  # df :                Dataset.
+  # policy_name :       String, {Beglian, Austrian}.
+  # risk_score_name :   String, name of risk score to be used.
+  # --x-- effect_type --x-- : string, {min, max} 
+  # assignment_type :   String, {upper, emp, lower}.
+  # new_outcome_name :  String, name of program assignment variable.
+  # capacity_mult :     Multiplier of capacities, default = 1.
   #
   #############################################################
   
   # get program capacities
-  program_capacities <- f_get_capacities(df, treatment6)
+  program_capacities <- f_get_capacities(df, capacity_mult)
   
   # create new outcome variable
   df <- f_create_outcome_var(df, new_outcome_name)
   
   # sort data according to policy by risk_score
-  df <- f_risk_2_policy(df, policy, risk_score)
+  df <- f_risk_2_policy(df, policy_name, risk_score_name)
   
   # greedy allocation
-  df <- f_greedy_allocation(df, program_capacities, effect_type, assignment_type, new_outcome_name, seed=1234)
+  df <- f_greedy_allocation(df, program_capacities, "min", assignment_type, new_outcome_name)
   
   # add potential outcomes for program allocation
   df <- f_program_2_iapo(df, new_outcome_name)
@@ -56,35 +55,32 @@ f_alg_policy <- function(df, policy, risk_score, effect_type, assignment_type, n
   return(df)
 }
 
-f_get_capacities <- function(df, name_treatment_var) {
+f_get_capacities <- function(df, capacity_mult=1) {
   
   #############################################################
   # 
-  # Get program capacities.
+  # Get program capacities. Returns list.
   #
-  # df :                  dataset
-  # name_treatment_var :  name of treatment variable
-  #
-  # Returns list.
+  # df :            Dataset.
+  # capacity_mult : Multiplier of capacities, default = 1.
   #
   #############################################################
   
-  # program_capacities <- colSums(wm)
-  # table(df$treatment6)
+  # checks
+  if (!(is.numeric(capacity_mult))) {
+    stop("Error: Capacitiy multiplier must be numeric.")
+  }
   
-  program_capacities <- df %>% 
-    group_by({{name_treatment_var}}) %>%
-    summarise(N = n())
+  # get observed capacities
+  list_programs <- as.list(table(df$treatment6))
   
-  list_programs <- as.list(setNames(program_capacities$N, program_capacities %>% pull({{ name_treatment_var }})))
+  # multiply capacities
+  list_programs <- lapply(list_programs, function(x) x * capacity_mult)
   
-  # change names in list 
-  # TODO fix requirement 
-  new_names <- paste0("iapo_", gsub(" ", "_", names(list_programs)))
-  names(list_programs) <- new_names
+  # clean program names in list 
+  names(list_programs) <- gsub(" ", "_", names(list_programs))
   
   return(list_programs)
-  
 }
 
 f_create_outcome_var <- function(df, new_outcome_name) {
@@ -98,6 +94,7 @@ f_create_outcome_var <- function(df, new_outcome_name) {
   #
   #############################################################
   
+  # check
   if (!is.character(new_outcome_name)) {
     stop("Error: Name for new outcome variable must be given as string.")
   }
@@ -110,66 +107,75 @@ f_create_outcome_var <- function(df, new_outcome_name) {
   return(df)
 }
 
-f_risk_2_policy <- function(df, policy, risk_score) {
+f_risk_2_policy <- function(df, policy_name, risk_score_name) {
   
   #############################################################
   #
-  # sort dataset by risk score according to given policy
+  # Sort dataset by risk score according to given policy.
   #
-  # df :        dataset
-  # policy :      string, {Belgian, Austrian}
-  # risk_score :  string, name of risk score to be used
+  # df :              Dataset.
+  # policy_name :     String, {Belgian, Austrian}.
+  # risk_score_name : String, name of risk score to be used.
   #
   #############################################################
   
-  if (policy == "Belgian") {
+  # checks
+  test <- c("Belgian", "Austrian")
+  if (!(policy_name %in% test)) {
+    stop("Error: Policy name must be either \"Belgian\" or \"Austrian\".")
+  }
+  
+  # policy sorting
+  if (policy_name == "Belgian") {
     
     # sort by risk_score in descending order
     df <- df %>% 
-      arrange(desc(!!sym(risk_score)))
+      arrange(desc(!!sym(risk_score_name)))
     
-    return(df)
-    
-  } else if (policy == "Austrian") {
+  } else if (policy_name == "Austrian") {
     
     # first select individuals with middle risk_scores, then rest
     df_middle <- df %>% 
-      arrange(desc( !!sym(risk_score) )) %>%
-      filter( !!sym(risk_score)  <= 0.7,  !!sym(risk_score)  >= 0.3)
+      arrange(desc( !!sym(risk_score_name) )) %>%
+      filter( !!sym(risk_score_name)  <= 0.7,  !!sym(risk_score_name)  >= 0.3)
     
     df_rest <- df %>%
-      arrange(desc( !!sym(risk_score) )) %>%
-      filter( !!sym(risk_score)  > 0.7 |  !!sym(risk_score)  < 0.3) %>%
+      arrange(desc( !!sym(risk_score_name) )) %>%
+      filter( !!sym(risk_score_name)  > 0.7 |  !!sym(risk_score_name)  < 0.3) %>%
       # random order across non-selected individuals
       sample_n(nrow(.))
     
     df <- rbind(df_middle, df_rest)
-    
-    return(df)
-    
-  } else {
-    
-    stop("Error: Policy must be either \"Belgian\" or \"Austrian\".")
   }
+  
+  return(df)
 }
 
 f_find_effective_program_i <- function(df, temp_program_names, effect_type, i) {
   
   #############################################################
   #
-  # select most effective treatment from available programs
+  # Select most effective program from available programs.
   #
-  # df :                dataset
-  # temp_program_names :  list, program names
-  # i :                   row number
-  # effect_type :         string, {min, max} 
+  # df :                  Dataset.
+  # temp_program_names :  List of available program names.
+  # effect_type :         String, {min, max}.
+  # i :                   Row index.
   #
   # Returns name of most effective program.
   #
   #############################################################
   
+  # check
+  test <- c("min", "max")
+  if (!(effect_type %in% test)) {
+    stop("Error: Effect type is miss-specified. Must be max or min.")
+  }
+  
+  temp_program_names <- paste0('iapo_', temp_program_names)
+  
   if (effect_type == "min") {
-    # effect that minimises target variable
+    # for treatment to minimise target variable
     
     assigned_program_name <- df %>%
       slice(i) %>%
@@ -178,11 +184,8 @@ f_find_effective_program_i <- function(df, temp_program_names, effect_type, i) {
       select(best_program) %>%
       pull()
     
-
-    return(assigned_program_name)
-    
   } else if (effect_type == "max") {
-    # effect that maximises target variable
+    # for treatment to maximise target variable
     
     assigned_program_name <- df %>%
       slice(i) %>%
@@ -190,95 +193,55 @@ f_find_effective_program_i <- function(df, temp_program_names, effect_type, i) {
       mutate(best_program = names(.)[max.col(.)]) %>%
       select(best_program) %>%
       pull()
-    
-    return(assigned_program_name)
-    
-  } else {
-
-    stop("Error: Effect type is miss-specified. Must be max or min.")
   }
+  
+  assigned_program_name <- sub('iapo_', '', assigned_program_name)
+  
+  return(assigned_program_name)
 }
 
-f_draw_program_assignment <- function(programs, propensities) {
+f_select_propensity_program_i <- function(df, temp_program_names, i) {
   
   #############################################################
   # 
-  # programs :      list of programs, length n
-  # propensities :  list of propensities, length n
+  # Sample program assignment weighted by propensities, returns
+  # program name.
   #
-  # Returns string with sampled program.
-  #
-  #############################################################
-  
-  sampled_program <- sample(programs, 1, prob = propensities)
-  return(sampled_program)
-}
-
-f_find_propensity_program_i <- function(df, temp_program_names, i, seed=1234) {
-  
-  #############################################################
-  # 
-  # select program by propensity score, propensities as weights
-  #
-  # df : 
-  # temp_program_names :
-  # i :
-  # seed : 
-  #
-  # Returns name of selected program.
+  # df :                  Dataset.
+  # temp_program_names :  List of available program names.
+  # i :                   Row index.
   #
   #############################################################
   
-  temp_em_program_names <- sub('iapo', 'em', temp_program_names)
+  temp_program_names <- paste0('em_', temp_program_names)
   
-  # # deterministic assignment of program with highest propensity
-  # assigned_program_name <- df %>%
-  #   slice(i) %>%
-  #   select(all_of(temp_em_program_names)) %>%
-  #   mutate(best_program = names(.)[max.col(.)]) %>%
-  #   select(best_program) %>%
-  #   pull()
-  
-  # probabilistic assignment using propensities as weights
+  # sample program assignment weighted by propensities 
   assigned_program_name <- df %>%
     slice(i) %>%
-    select(all_of(temp_em_program_names)) %>% 
-    mutate(selected_program = f_draw_program_assignment(names(.), .)) %>%
+    select(all_of(temp_program_names)) %>% 
+    mutate(selected_program = sample(names(.), 1, .)) %>%
     select(selected_program) %>%
     pull()
   
-  # change name back to "iapo_" for later 
-  assigned_program_name <- sub('em', 'iapo', assigned_program_name)
+  # clean program name
+  assigned_program_name <- sub('em_', '', assigned_program_name)
     
   return(assigned_program_name) 
 }
 
-f_find_random_program_i <- function(df, temp_program_names, i, seed=1234) {
- 
+f_select_random_program <- function(df, temp_program_names) {
   
   #############################################################
   # 
-  # select random (uniformly) program from available 
+  # Sample program assignment uniformly from available programs.
   #
-  # df : 
-  # temp_program_names :
-  # i :
-  # seed : 
-  #
-  # Returns name of selected program.
+  # df :                  Dataset.
+  # temp_program_names :  List of available program names. 
   #
   #############################################################
   
-  # uniform probabilities for assignment
-  n <- length(temp_program_names)
-  prob_uniform <- rep(1/n, n)
-  
-  assigned_program_name <- df %>%
-    slice(i) %>%
-    select(all_of(temp_program_names)) %>% 
-    mutate(selected_program = f_draw_program_assignment(names(.), prob_uniform)) %>%
-    select(selected_program) %>%
-    pull()
+  # sample uniformly from available programs
+  assigned_program_name <- sample(temp_program_names, 1)
   
   return(assigned_program_name) 
 }
@@ -322,25 +285,31 @@ f_update_capacities <- function(list_programs, assigned_program_name) {
   
 }
 
-f_greedy_allocation <- function(df, list_programs, effect_type, assignment_type, new_outcome_name, seed=1234) {
+f_greedy_allocation <- function(df, list_programs, effect_type, assignment_type, new_outcome_name) {
   
   #############################################################
   #
-  # performs greedy allocation of individuals into ALMPs
-  # according to capacity
+  # Greedy allocation of individuals into ALMPs according to capacity and
+  # chosen strategy. 
   #
-  # df :              dataset
-  # list_programs :     list of available ALMPs and capacities 
-  # effect_type :       string, {min, max} 
-  # assignment_type :   string, {upper, emp, lower}
-  # new_outcome_name :  string, name of new variable
+  # df :                Dataset.
+  # list_programs :     List of available ALMPs and capacities.
+  # effect_type :       String, {min, max}.
+  # assignment_type :   String, {upper, emp, lower}.
+  # new_outcome_name :  String, name of new variable.
   #
   #############################################################
+  
+  # checks
+  test <- c("upper", "emp", "lower")
+  if (!(assignment_type %in% test)) {
+    stop("Error: Assignment type must be \"upper\", \"lower\", or \"emp\".")
+  }
   
   n <- nrow(df)
-  
   for (i in 1:n) {
     
+    # checks
     if (all(list_programs > 0)) {
       # test availability of capacities
       
@@ -352,25 +321,22 @@ f_greedy_allocation <- function(df, list_programs, effect_type, assignment_type,
         warning("Warning: Some program name has zero-length character.")
       }
       
-      # select program name
+      # select name of assigned program
       if (assignment_type == "upper") {
         # upper bound, assign most effective available program
         
         assigned_program_name <- f_find_effective_program_i(df, temp_program_names, effect_type, i)
         
       } else if (assignment_type == "lower") {
-        # lower bound, assign random available program
+        # lower bound, sample assignment uniformly from available programs
         
-        assigned_program_name <- f_find_random_program_i(df, temp_program_names, i, seed)
-        
+        assigned_program_name <- f_select_random_program(df, temp_program_names)
+
       } else if (assignment_type == "emp") {
-        # empirical strategy, assign program by propensity score
+        # "empirical" strategy, sample assignment weighted by propensity score
         
-        assigned_program_name <- f_find_propensity_program_i(df, temp_program_names, i, seed)
-          
-      } else {
-        
-        stop("Error: Assignment type must be \"upper\", \"lower\", or \"emp\".")
+        assigned_program_name <- f_select_propensity_program_i(df, temp_program_names, i)
+
       }
       
       # assign program
@@ -383,8 +349,8 @@ f_greedy_allocation <- function(df, list_programs, effect_type, assignment_type,
         stop("Error: No program capacity before loop has closed.") 
     }
     
+    # print #iteration and program capacities
     if (i %% 1e3 == 0) {
-      # print #iteration and program capacities
       cat('Iteration:', i, '\n')
       print(list_programs)
     }
@@ -399,24 +365,44 @@ f_program_2_iapo <- function(df, new_outcome_name) {
   #
   # Translate program assignment into potential outcome under policy.
   #
-  # df :              dataset
-  # new_outcome_name :  string, name of new variable
-  #
-  # Returns dataset.
+  # df :                Dataset
+  # new_outcome_name :  String, name of new program variable.
   #
   #############################################################
   
+  # name of iapo variable under policy assignment
   new_potential_outcome_name <- paste0("iapo_", new_outcome_name)
   
+  # add "iapo_" to assigned program names for look up
+  df[[new_outcome_name]] <- paste0("iapo_", df[[new_outcome_name]])
+  
+  # look up IAPOs of assigned programs 
   df[[new_potential_outcome_name]] <- map_dbl(seq(nrow(df)), function(i) {
-    iapo_program <- df[[new_outcome_name]][i]
-    df[[iapo_program]][i]
+    program_name <- df[[new_outcome_name]][i]
+    df[[program_name]][i]
   })
   
   return(df)
 }
 
 # ---------------------------------------------------------------------------- #
+# Simulations
+# ---------------------------------------------------------------------------- #
+
+test <- f_alg_policy(test_db, "Belgian", "risk_score_logistic", "upper", "p_b_log_min_upper_mult2", capacity_mult=2)
+
+test_db <- db %>% 
+  slice_sample(prop=0.1)
+
+policy01 <- c("Belgian", "risk_score_logistic", "upper", "policy_bel_rlog_upper_mult1", 1)
+policy02 <- c("Belgian", "risk_score_logistic", "emp", "p_b_log_min_emp", 1)
+policy03 <- c("Belgian", "risk_score_logistic", "lower", "p_b_log_min_lower", 1)
+
+policy04 <- c("Austrian", "risk_score_logistic", "upper", "p_a_log_min_upper", 1)
+policy05 <- c("Austrian", "risk_score_logistic", "emp", "p_a_log_min_emp", 1)
+policy06 <- c("Austrian", "risk_score_logistic", "lower", "p_a_log_min_lower", 1)
+
+
 
 for (i in 1:6) {
   
