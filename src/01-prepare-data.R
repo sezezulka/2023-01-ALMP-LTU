@@ -145,7 +145,7 @@ f_create_outcomes <- function(df) {
   
   for (i in 2:36) {
     temp_var_name <- paste0('employed', i)
-    df$y_unemp <- ifelse(df$y_unemp == 0, df[, temp_var_name], df$y_unemp)
+    df$y_unemp <- ifelse(df$y_unemp == 0, df[[temp_var_name]], df$y_unemp)
   }
   
   df$y_unemp <- ifelse(df$y_unemp == 0, 37, df$y_unemp)
@@ -154,6 +154,7 @@ f_create_outcomes <- function(df) {
   # 3. outcome y_exit12: 
   # long-term unemployment (12 month unemployment after (pseudo) program start)
   # TODO discuss!
+  df$y_exit12 <- NA
   df$y_exit12[df$elap == 0] <- ifelse(df$y_unemp[df$elap == 0] > 15, 1, 0)
   df$y_exit12[df$elap == 1] <- ifelse(df$y_unemp[df$elap == 1] > 18, 1, 0)
   

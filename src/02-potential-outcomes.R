@@ -204,6 +204,7 @@ f_smoothed_iapos <- function(w_mat, gamma, x, cfm, cv=4, seed=12345, bound_outco
   for (i in 1:ncol(w_mat)) {
     
     # cross-validation (theta)
+    # TODO check cv logic in combination with grf function regression_forest
     t = matrix(NA, nrow(cfm), ncol(cfm))
     
     for (c in 1:cv) {
