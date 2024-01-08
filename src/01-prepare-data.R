@@ -153,17 +153,15 @@ f_create_outcomes <- function(df) {
   
   # 3. outcome y_exit12: 
   # long-term unemployment (12 month unemployment after (pseudo) program start)
-  # TODO discuss!
   df$y_exit12 <- NA
   df$y_exit12[df$elap == 0] <- ifelse(df$y_unemp[df$elap == 0] > 15, 1, 0)
   df$y_exit12[df$elap == 1] <- ifelse(df$y_unemp[df$elap == 1] > 18, 1, 0)
   
-  # original from Körtner/Bach
+  # version from Körtner/Bach
   # df$y_exit12 <- ifelse(df$y_unemp > 12, 1, 0)
   
   return(df)
 }
-
 
 # ---------------------------------------------------------------------------- #
 # Preprocessing
