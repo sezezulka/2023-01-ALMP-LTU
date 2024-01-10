@@ -16,8 +16,10 @@ set.seed(seed)
 
 db = read.csv("data/almp_effects.csv")
 
+
 # ---------------------------------------------------------------------------- #
 # descriptive statistics
+# ---------------------------------------------------------------------------- #
 summary_table_overall <- db %>%
   summarise(
     Obs = n(),
@@ -55,8 +57,10 @@ summary_table_treatment <- db %>%
     decimals = 2
   )
 
+
 # ---------------------------------------------------------------------------- #
 # LTU gaps
+# ---------------------------------------------------------------------------- #
 mean(db$y_exit12[db$female==1])
 mean(db$y_exit12[db$female==0])
 mean(db$y_emp[db$female==1])
@@ -79,8 +83,10 @@ mean(db$y_exit12[db$qual_unskilled <= median_income/2])
 mean(db$y_emp[db$past_income > median_income/2])
 mean(db$y_emp[db$past_income >= median_income/2])
 
+
 # ---------------------------------------------------------------------------- #
 # ATEs and APOs
+# ---------------------------------------------------------------------------- #
 db %>% select(starts_with('iate_')) %>% 
   colMeans()
 
@@ -100,3 +106,20 @@ pivot_longer(db, starts_with('iate_')) %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  
 
 
+# ---------------------------------------------------------------------------- #
+# Risk Scires
+# ---------------------------------------------------------------------------- #
+# analysis
+hist(db$risk_score_logistic, breaks=100)
+
+ggplot(db, aes(x=risk_score_logistic, fill=as.factor(female))) +
+  geom_histogram(position = "identity", alpha=0.7, bins=100) +
+  labs(title="Histogram of risk score, by Gender", x="Risk Score", y="Frequency") +
+  scale_fill_manual(values = c("#56B4E9", "#009E73"), name = "Gender (binary)") +
+  theme_minimal()
+
+ggplot(db, aes(x=risk_score_logistic, fill=as.factor(swiss))) +
+  geom_histogram(position = "identity", alpha=0.7, bins=100) +
+  labs(title="Histogram of risk score, by Citizenship", x="Risk Score", y="Frequency") +
+  scale_fill_manual(values = c("#56B4E9", "#009E73"), name = "Citizenship (binary)") +
+  theme_minimal()

@@ -90,14 +90,15 @@ f_risk_log_reg <- function(X_train, y_train, X_test) {
   
   # train model
   ridge.log <- cv.glmnet(X_train,
-                         y_train,
+                         as.factor(y_train),
                          family = 'binomial',
-                         alpha = 0)
+                         alpha = 0
+                         )
   
-  print(paste("Optimal lambda:", ridge.log$lambda.min))
+  print(paste("Optimal lambda:", ridge.log$lambda.1se))
   
   # prediction on test set
-  y_score_log <- predict(ridge.log, X_test, s = "lambda.min", type = 'response')
+  y_score_log <- predict(ridge.log, X_test, s = "lambda.1se", type = 'response')
   
   return(unname(y_score_log))
 }
@@ -141,11 +142,11 @@ f_risk_fair_experiments <- function(df,
   if (methods_all == TRUE) {
     methods <- c("sp-komiyama", "eo-komiyama", "if-berk")
     # steps <- 0.05
-    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5) # seq(0,0.4,steps)
+    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.4,steps)
   } else {
     methods <- c("sp-komiyama", "eo-komiyama") 
     # steps <- 0.02
-    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5) # seq(0,0.2,steps)
+    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.2,steps)
   }
   
   number_col <- length(methods) * length(unfair_levels)
@@ -226,7 +227,7 @@ f_risk_fair_experiments <- function(df,
   return(outcomes)
 }
 
-risk_fair_estimation <- function(X_train,
+f_risk_fair_estimation <- function(X_train,
                                  y_train,
                                  X_test,
                                  y_test,
@@ -308,7 +309,7 @@ f_plot_fair_loss <- function(loss_list, method) {
   } else if (method=='if') {
     title <- 'Individual Fairness'
   }
-  unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5)
+  unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1)
   selected_list <- loss_list[grep(paste0("^", method), names(loss_list))]
   
   min_idx <- which.min(selected_list)
@@ -363,7 +364,7 @@ f_risk_scores <- function(df,
                                 )
   
   # fair logistic regression
-  risk_fair_scores <- risk_fair_estimation(X_train,
+  risk_fair_scores <- f_risk_fair_estimation(X_train,
                                     y_train,
                                     X_test,
                                     y_test,
@@ -375,9 +376,11 @@ f_risk_scores <- function(df,
   # return results for test set
   df <- df %>%
     slice(-idx) %>%
-    mutate(risk_score_log = y_score_log)
-  
-  df <- cbind(df, risk_fair_scores)
+    mutate(risk_score_log := y_score_log,
+           risk_score_sp := risk_fair_scores[,1],
+           risk_score_eo := risk_fair_scores[,2],
+           risk_score_if := risk_fair_scores[,3]
+           )
   
   return(df)
   
@@ -387,19 +390,93 @@ f_risk_scores <- function(df,
 # Risk Score estimation
 # ---------------------------------------------------------------------------- #
 outcome <- "y_exit12"
-sensitive_attribute <- "swiss"
-methods_fairness <- list("sp-komiyama" = ,
-                         "eo-komiyama" = ,
-                         "if-berk" = )
+sensitive_attribute <- "female"
+methods_fairness <- list("sp-komiyama" = 0.01,
+                         "eo-komiyama" = 0.01,
+                         "if-berk" = 0.01)
 
-db_simulation <- f_risk_scores(db, 
-                               risk_var_list,
-                               outcome,
-                               sensitive_attribute,
-                               train_share = 0.5,
-                               methods_fairness)
+db <- f_risk_scores(db,
+                    risk_var_list,
+                    outcome,
+                    sensitive_attribute,
+                    train_share = 0.5,
+                    methods_fairness)
 
 
+write.csv(db, file="data/1203_ALMP_Sample_effects_risk_fairFemale.csv")
+
+# ---------------------------------------------------------------------------- #
+# analysis
+
+acc_parity(db, "y_exit12", "female", probs = "risk_score_log")
+acc_parity(db, "y_exit12", "swiss", probs = "risk_score_log")
+
+dem_parity(db, "y_exit12", "female", probs = "risk_score_log")
+dem_parity(db, "y_exit12", "swiss", probs = "risk_score_log")
+
+equal_odds(db, "y_exit12", "female", probs = "risk_score_log")
+equal_odds(db, "y_exit12", "swiss", probs = "risk_score_log")
+
+roc_parity(db, "y_exit12", "female", probs = "risk_score_log")
+roc_parity(db, "y_exit12", "swiss", probs = "risk_score_log")
+
+
+# ---------------------------------------------------------------------------- #
+# plots
+
+# fair-female; female
+ggplot(db, aes(x = risk_score_log, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_sp, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_eo, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_if, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+
+# fair-swiss; female
+ggplot(db_simulation, aes(x = risk_score_log, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `sp-komiyama_0.05`, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `eo-komiyama_0.05`, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `if-berk_0.1`, fill=as.factor(female))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+# fair-female; swiss
+ggplot(db, aes(x = risk_score_log, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_sp, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_eo, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db, aes(x = risk_score_if, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+
+# fair-swiss; swiss
+ggplot(db_simulation, aes(x = risk_score_log, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `sp-komiyama_0.05`, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `eo-komiyama_0.05`, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
+
+ggplot(db_simulation, aes(x = `if-berk_0.1`, fill=as.factor(swiss))) +
+  geom_histogram(bins=100, alpha=0.5) 
 
 
 # ---------------------------------------------------------------------------- #
@@ -408,28 +485,14 @@ db_simulation <- f_risk_scores(db,
 
 db <- f_risk_logistic_reg(db, risk_var_list, outcome, cv=4)
 
-# analysis
-hist(db$risk_score_logistic, breaks=100)
-
-ggplot(db, aes(x=risk_score_logistic, fill=as.factor(female))) +
-  geom_histogram(position = "identity", alpha=0.7, bins=100) +
-  labs(title="Histogram of risk score, by Gender", x="Risk Score", y="Frequency") +
-  scale_fill_manual(values = c("#56B4E9", "#009E73"), name = "Gender (binary)") +
-  theme_minimal()
-
-ggplot(db, aes(x=risk_score_logistic, fill=as.factor(swiss))) +
-  geom_histogram(position = "identity", alpha=0.7, bins=100) +
-  labs(title="Histogram of risk score, by Citizenship", x="Risk Score", y="Frequency") +
-  scale_fill_manual(values = c("#56B4E9", "#009E73"), name = "Citizenship (binary)") +
-  theme_minimal()
-
 
 # ---------------------------------------------------------------------------- #
 # Fair Risk Scores: Experiments
 # ---------------------------------------------------------------------------- #
 
-risk_fair_female <- f_risk_fair_experiments(db, risk_var_list, outcome, 'female', methods_all = FALSE, loss = 'cel')
-risk_fair_swiss <- f_risk_fair_experiments(db, risk_var_list, outcome, 'swiss', methods_all = TRUE, loss = 'cel')
+risk_fair_female <- f_risk_fair_experiments(db, risk_var_list, outcome, 'female', methods_all = FALSE, loss = 'mse')
+# TODO what the fuck?
+risk_fair_swiss <- f_risk_fair_experiments(db, risk_var_list, outcome, 'swiss', methods_all = FALSE, loss = 'mse')
 
 
 f_plot_fair_loss(risk_fair_female$loss_list, "sp")

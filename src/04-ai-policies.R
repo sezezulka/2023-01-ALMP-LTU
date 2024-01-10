@@ -14,7 +14,9 @@ source("src/00-utils.R")
 
 set.seed(seed)
 
-db = read.csv(effect_data_path)
+# db = read.csv(effect_risk_data_path)
+db <- read.csv("data/1203_ALMP_Sample_effects_risk_fairFemale.csv")
+
 
 # ---------------------------------------------------------------------------- #
 # Functions
@@ -137,11 +139,11 @@ f_risk_2_policy <- function(df, policy_name, risk_score_name) {
     # first select individuals with middle risk_scores, then rest
     df_middle <- df %>% 
       arrange(desc( !!sym(risk_score_name) )) %>%
-      filter( !!sym(risk_score_name)  <= 0.7,  !!sym(risk_score_name)  >= 0.3)
+      filter( !!sym(risk_score_name) <= 0.7 & !!sym(risk_score_name)  >= 0.3)
     
     df_rest <- df %>%
       arrange(desc( !!sym(risk_score_name) )) %>%
-      filter( !!sym(risk_score_name)  > 0.7 |  !!sym(risk_score_name)  < 0.3) %>%
+      filter( !!sym(risk_score_name) > 0.7 | !!sym(risk_score_name) < 0.3) %>%
       # random order across non-selected individuals
       sample_n(nrow(.))
     
@@ -389,36 +391,145 @@ f_program_2_iapo <- function(df, new_outcome_name) {
 # Simulations
 # ---------------------------------------------------------------------------- #
 
-test_db <- db %>% 
-  group_by(treatment6) %>%
-  slice_sample(prop=0.1) %>%
-  ungroup()
-
 # policy choices
 policy_style <- c("Belgian", "Austrian")
-risk_scores <- c("risk_score_logistic")
-assignment_style <- c("upper", "emp", "lower")
+risk_scores <- c("risk_score_log", "risk_score_sp", "risk_score_eo", "risk_score_if")
+assignment_style <- c("upper", "lower") # "emp"
 capacitiy_multiplier <- seq(1,5)
 
 for (p in policy_style) {
   for (a in assignment_style) {
-    for (c in capacitiy_multiplier) {
-      
-      policy_name <- paste("policy", p, "rlog", a, c, sep="_")
-      print(paste0("Next policy: ", policy_name))
-      
-      test_db <- f_alg_policy(test_db, p, "risk_score_logistic", a, policy_name, c)
+    for (r in risk_scores) {
+      for (c in capacitiy_multiplier) {
+        
+        policy_name <- paste("policy", p, r, a, c, sep="_")
+        print(paste0("Next policy: ", policy_name))
+        
+        db <- f_alg_policy(db, p, r, a, policy_name, c)
+      }
     }
   }
 }
 
+# TODO run simulations 10 times and average risk scores
+
+
+# ---------------------------------------------------------------------------- #
 # visualise 
+# ---------------------------------------------------------------------------- #
+
+f_vis_LTU <- function(df, policy_name, s_attribute, fair_attribute) {
+  
+  #############################################################
+  #
+  # Plots LTU share under a policy by risk scores
+  #
+  # df :            Dataset.
+  # policy_name :   String, "Belgian" or "Austrian"
+  # s_attribute :   String, "swiss" or "female" for analysis
+  # fair_attribute : String, variable for which fairness risk scores are estimated.
+  #
+  #############################################################
+  
+  # Select variables with a specific prefix
+  name_ <- paste0('iapo_policy_', policy_name, '_')
+  selected_vars <- grep(name_, names(df), value = TRUE)
+  
+  # Calculate mean for selected variables
+  df_means <- df %>%
+    group_by( !!sym(s_attribute) ) %>%
+    summarise(across(all_of(selected_vars), mean))
+  
+  # Convert the data to long format, add factors
+  df_means_long <- df_means %>%
+    tidyr::pivot_longer(cols = starts_with("iapo_policy_"),
+                        names_to = "policy",
+                        values_to = "LTU_share") %>%
+    mutate(multiplier = factor(substring(policy, nchar(policy), nchar(policy))),
+           risk_score = factor(rep(rep(1:4, each = 5), times = n() / 5)[1:n()]),
+           groups = factor(rep(1:(n() %/% 5 + 1), each = 5)[1:n()]),
+           strategy = factor(rep(rep(1:2, each = 20), times = n() / 2)[1:n()])
+    )
+  
+  # pre-intervention LTU shares
+  pre_LTU_s <- mean(df$y_exit12[df[,s_attribute]==1])
+  pre_LTU_non_s <- mean(df$y_exit12[df[,s_attribute]==0])
+  pre_LTU <- mean(df$y_exit12)
+  
+  # title and labels
+  title <- paste0("Share of LTU under ", policy_name, " policy.")
+  subtitle <- paste0("Fair risk scores for ", fair_attribute)
+  if (s_attribute == "female") {
+    label_s <- c("0" = "Male", "1" = "Female")
+    y_limits <- c(0.33, 0.45)
+  } else if (s_attribute == "swiss") {
+    label_s <- c("0" = "Non-Citizen", "1" = "Citizen")
+    y_limits <- c(0.33, 0.52)
+  } else {
+    stop("Error: Sensitive attribute must be female or swiss.")
+  }
+  
+
+  # plot
+  p <- ggplot(df_means_long, aes(x = multiplier, 
+                         y = LTU_share, 
+                         color = as.factor(risk_score), 
+                         shape = as.factor(!!sym(s_attribute) ), 
+                         alpha=as.factor(strategy))) +
+    geom_line(aes(group = groups), size = 1) +
+    geom_point(size = 4, position = position_dodge(width = 0.1)) +
+    geom_hline(yintercept = pre_LTU_s, linetype = "dashed") +
+    geom_hline(yintercept = pre_LTU_non_s, linetype = "dashed") +
+    geom_hline(yintercept = pre_LTU, linetype = "dashed") +
+    labs(title = title,
+         subtitle = subtitle,
+         x = "Capacity Multiplier",
+         y = "LTU Share",
+         color = "Risk Scores",
+         shape = paste0("Sensitive Attribute: ", s_attribute),
+         alpha = "Assignment strategy") +
+    scale_color_manual(
+      values = c(1,2,3,4),
+      labels = c("1" = "Logistic Regression", "2" = "Independence", "3" = "Separation", "4" = "Individual Fairness")
+    ) +
+    scale_shape_manual(
+      values = c(16, 17),
+      labels = label_s
+    ) + 
+    scale_alpha_manual(
+      values = c(1, 0.5),
+      labels = c("1" = "Upper", "2" = "Lower")
+    ) +
+    coord_cartesian(ylim = y_limits) +
+    theme_gray()
+  
+  print(p)
+  return(df_means_long)
+}
+
+
+f_vis_LTU(db, "Belgian", "female", "Gender")
+f_vis_LTU(db, "Austrian", "female", "Gender")
+
+f_vis_LTU(db, "Belgian", "swiss", "Gender")
+f_vis_LTU(db, "Austrian", "swiss", "Gender")
+
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------------- #
+# Archive
+# ---------------------------------------------------------------------------- #
 
 # Select variables with a specific prefix
-selected_vars <- grep("iapo_policy_Belgian_rlog_upper", names(test_db), value = TRUE)
+selected_vars <- grep("iapo_policy_Belgian_", names(db), value = TRUE)
 
 # Calculate mean for selected variables
-means_df <- test_db %>%
+means_df <- db %>%
   group_by(female) %>%
   summarise(across(all_of(selected_vars), mean))
 
@@ -427,33 +538,56 @@ means_long <- means_df %>%
   tidyr::pivot_longer(cols = starts_with("iapo_policy_"),
                       names_to = "variable",
                       values_to = "mean_value") %>%
-  mutate(factor_variable = factor(substring(variable, nchar(variable), nchar(variable))))
+  mutate(multiplier = factor(substring(variable, nchar(variable), nchar(variable))),
+         risk_score = factor(rep(rep(1:4, each = 5), times = n() / 5)[1:n()]),
+         groups = factor(rep(1:(n() %/% 5 + 1), each = 5)[1:n()]),
+         strategy = factor(rep(rep(1:2, each = 20), times = n() / 2)[1:n()])
+         )
 
 # Create a ggplot with points connected by lines
-pre_LTU_f <- mean(test_db$y_exit12[test_db$female==1])
-pre_LTU_m <- mean(test_db$y_exit12[test_db$female==0])
-pre_LTU <- mean(test_db$y_exit12)
+pre_LTU_c <- mean(db$y_exit12[db$female==1])
+pre_LTU_nc <- mean(db$y_exit12[db$female==0])
+pre_LTU <- mean(db$y_exit12)
 
-ggplot(means_long, aes(x = factor_variable, y = mean_value, color = as.factor(female))) +
-  geom_line(aes(group = female), size = 1) +
-  geom_point(size = 3, position = position_dodge(width = 0.2)) +
-  geom_point(aes(x = 0, y = pre_LTU_f), color = "#00AFBB", size = 3) +  # Custom point
-  geom_point(aes(x = 0, y = pre_LTU_m), color = "#D55E00", size = 3) +  # Custom point
-  geom_point(aes(x = 0, y = pre_LTU), color = "black", size = 3) +  # Custom point
-  labs(title = "Mean of LTU after Belgian/rlog/upper, by Gender",
+ggplot(means_long, aes(x = multiplier, 
+                       y = mean_value, 
+                       color = as.factor(risk_score), 
+                       shape = as.factor(female), 
+                       alpha=as.factor(strategy))) +
+  geom_line(aes(group = groups), size = 1) +
+  geom_point(size = 4, position = position_dodge(width = 0.01)) +
+  geom_hline(yintercept = pre_LTU_c, linetype = "dashed") +
+  geom_hline(yintercept = pre_LTU_nc, linetype = "dashed") +
+  geom_hline(yintercept = pre_LTU, linetype = "dashed") +
+  labs(title = "Share of LTU under Belgian policy",
        x = "Capacity Multiplier",
        y = "LTU Share",
-       color = "Gender") +
-  scale_x_discrete(breaks = c("0", levels(means_long$factor_variable)),
-                   labels = c("0", levels(means_long$factor_variable))) +
-  theme_minimal()
+       color = "Type Risk Score",
+       shape = "Sensitive Attribute: Gender",
+       alpha = "Assignment strategy") +
+  scale_color_manual(
+    values = c(1,2,3,4),
+    labels = c("1" = "Logistic Regression", 
+               "2" = "Independence", 
+               "3" = "Separation", 
+               "4" = "Individual Fairness")
+  ) +
+  scale_shape_manual(
+    values = c(16, 17),
+    labels = c("0" = "Male", 
+               "1" = "Female")
+  ) + 
+  scale_alpha_manual(
+    values = c(1, 0.5),
+    labels = c("1" = "Upper", 
+               "2" = "Lower")
+  ) +
+  theme_gray()
 
-# TODO add pre-LTU gap
-# TODO how to combine some of these plots in one?
 
 
 # ---------------------------------------------------------------------------- #
-write.csv(test_db, file="data/1203_ALMP_Sample_Simulations_Test.csv")
+write.csv(db, file="data/1203_ALMP_Sample_Simulations_fairfemale.csv")
 
 # ---------------------------------------------------------------------------- #
 # analysis

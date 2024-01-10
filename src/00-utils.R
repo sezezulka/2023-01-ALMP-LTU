@@ -25,6 +25,8 @@ raw_data_path <- c("data/swissubase_1203_1_0/1203_ALMP_Data_E_v1.0.0.csv")
 
 effect_data_path <- c("data/1203_ALMP_Sample_IATEs.csv")
 
+effect_risk_data_path <- c("data/1203_ALMP_Sample_IATEs_fair_risk.csv")
+
 effects_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no",
                       "cw_age","cw_cooperative","cw_educ_above_voc","cw_educ_tertiary",
                       "cw_female","cw_missing","cw_own_ue","cw_tenure","cw_voc_degree",
