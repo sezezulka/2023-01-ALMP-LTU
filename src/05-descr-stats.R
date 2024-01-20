@@ -14,13 +14,14 @@ setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
 seed = 12345
 set.seed(seed)
 
-db = read.csv("data/almp_effects.csv")
+db_sim = read.csv("data/1203_ALMP_effects_risk_fairFemale_sim.csv")
 
 
 # ---------------------------------------------------------------------------- #
 # descriptive statistics
 # ---------------------------------------------------------------------------- #
-summary_table_overall <- db %>%
+summary_table_overall <- db_sim %>%
+  # filter(training==0) %>%
   summarise(
     Obs = n(),
     Share_LTU = mean(y_exit12),
@@ -31,7 +32,8 @@ summary_table_overall <- db %>%
     Avg_Past_Income = mean(past_income)
   )
 
-summary_table_treatment <- db %>%
+summary_table_treatment <- db_sim %>%
+  filter(training==0) %>%
   group_by(treatment6) %>%
   summarise(
     Obs = n(),
@@ -61,8 +63,19 @@ summary_table_treatment <- db %>%
 # ---------------------------------------------------------------------------- #
 # LTU gaps
 # ---------------------------------------------------------------------------- #
-mean(db$y_exit12[db$female==1])
-mean(db$y_exit12[db$female==0])
+# Gender gap
+mean(db_test$y_exit12)
+mean(db_test$y_exit12[db_test$female==1])
+mean(db_test$y_exit12[db_test$female==0])
+mean(db_test$y_exit12[db_test$female==1]) - mean(db_test$y_exit12[db_test$female==0])
+
+# citizengap
+mean(db_test$y_exit12)
+mean(db_test$y_exit12[db_test$foreigner==1])
+mean(db_test$y_exit12[db_test$foreigner==0])
+mean(db_test$y_exit12[db_test$foreigner==1]) - mean(db_test$y_exit12[db_test$foreigner==0])
+
+# old
 mean(db$y_emp[db$female==1])
 mean(db$y_emp[db$female==0])
 
@@ -87,27 +100,88 @@ mean(db$y_emp[db$past_income >= median_income/2])
 # ---------------------------------------------------------------------------- #
 # ATEs and APOs
 # ---------------------------------------------------------------------------- #
-db %>% select(starts_with('iate_')) %>% 
+db_sim %>% 
+  filter(training==0) %>%
+  select(starts_with('iate_')) %>% 
   colMeans()
 
-db %>% select(starts_with('iapo_')) %>% 
+db_sim %>% 
+  filter(training==0) %>%
+  select(starts_with('iapo_')) %>% 
   colMeans()
 
 # plot IATEs
-pivot_longer(db, starts_with('iate_')) %>%
-  ggplot(aes(name, value)) +
+db_iates <- db_sim %>%
+  filter(training==0) %>%
+  select(starts_with('iate_')) 
+
+treatment_names <-  c("Computer", "Employment", "Job Search", "Language", "Personality", "Vocational Training")
+
+data_long <- gather(db_iates, key = "IATE", value = "Value")
+data_long <- data_long %>%
+  mutate(IATE = sub("iate_", "", IATE)) %>%
+  mutate(IATE = sub("_", " ", IATE))
+
+data_long$IATE <- factor(data_long$IATE, treatments_list[-1])
+
+
+
+db_gender <- db_sim %>%
+  group_by(female) %>%
+  reframe(across(starts_with('iate_')))
+
+db_gender_long <- db_gender %>%
+  pivot_longer(cols = starts_with("iate_"), 
+               names_to = "IATE",
+               values_to = "Value")
+
+ggplot(db_gender_long, aes(x=interaction(as.factor(female), y=IATE), y=Value, fill=as.factor(female))) +
   geom_violin() +
+  geom_hline(yintercept = 0) + 
   stat_summary(fun.data = "mean_sdl", 
-               geom="pointrange", color="black") +
-  # geom_jitter(shape=16, position=position_jitter(0.1)) +
-  labs(title = "estimated IATEs for different programs (no program is baseline)",
-       x = "ALMP",
-       y = "IATE") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+                geom="pointrange", color="black") +
+  # geom_point(position = position_jitter(width = 0.1), size = 0.5, alpha = 0.3) +   
+  # geom_boxplot(width = 0.1, fill = "white", color = "black") +  # Overlay boxplot for clarity
+  geom_text(stat = "summary", fun = function(x) mean(x), 
+            aes(label = round(..y.., 2)),
+            vjust = 2, show.legend = FALSE) + 
+  labs(title = "Estimated Individualised Average Treatment Effects (IATEs) on LTU of Swiss Labor Market Programs.",
+       subtitle = "No Porgram is baseline treatment.",
+       x = "IATE", 
+       y = "Value",
+       fill = "Gender") +
+  scale_fill_manual(
+    values = c(10, 20),
+    labels = c("0" = "Male", "1" = "Female")) +
+  scale_x_discrete(labels = rep(treatment_names, each=2)) +  
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+
+
+
+
+
+iate_results_test[,1]
+
+ggplot(data_long, aes(x=IATE, y=Value)) +
+  geom_violin() +
+  stat_summary(fun.y = "mean", 
+              geom="point", colour = "black", shape = 3, size=4) +
+  geom_hline(yintercept = 0) + 
+  labs(y = "IATE") +
+  scale_x_discrete(labels = treatments_list[-1]) +  
+  theme_classic() +
+  theme(axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+
 
 
 # ---------------------------------------------------------------------------- #
-# Risk Scires
+# Risk Scores
 # ---------------------------------------------------------------------------- #
 # analysis
 hist(db$risk_score_logistic, breaks=100)

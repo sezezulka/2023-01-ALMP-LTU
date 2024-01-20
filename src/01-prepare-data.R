@@ -23,16 +23,15 @@ library(grf)
 
 # set seed
 set.seed(seed)
-# TODO .Random.seed[1] does not reflect seed!
 
 # read data
-db = read.csv(raw_data_path)
+db_raw = read.csv(raw_data_path)
 
 # ---------------------------------------------------------------------------- #
 # Functions
 # ---------------------------------------------------------------------------- #
 
-f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, seed=12345) {
+f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, train_share=0.5, seed=12345) {
   
   #############################################################
   # 
@@ -46,6 +45,7 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, s
   # treatment_list :    List of treatments to be kept. 
   # var_list :          List of variables for covariate matrix.
   # random_sample :     Boolean, true if df is reduced to 30% sample.
+  # train_share :       Size of training data, default = 0.5.
   # seed :              Seed, default = 12345.
   # 
   #############################################################
@@ -54,7 +54,9 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, s
     mutate(ID = row_number()) %>%
     select(ID, dplyr::everything()) %>%
     filter(canton_german == 1) %>%
-    filter(treatment6 %in% treatment_list)
+    filter(treatment6 %in% treatment_list) %>%
+    mutate(foreigner = 1 - swiss,
+           foreigner_married = foreigner * married) 
   
   if (random_sample==TRUE) {
     df <- df %>%
@@ -66,6 +68,8 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, s
   df <- f_pseudo_random_starting(df, var_list, seed = seed)
   
   df <- f_create_outcomes(df)
+  
+  df <- f_train_test(df, train_share = train_share)
   
   return(df)
 }
@@ -101,9 +105,13 @@ f_pseudo_random_starting <- function(df, var_list, seed=12345) {
   # table(df$elap)
   
   # remove those that are employed at the pseudo starting point
+  n_rows <- nrow(df)
   df <- df %>% 
     filter(!(df$elap == 1 & (df$employed1 == 1 | df$employed2 == 1 | df$employed3 == 1)))
-  # TODO add count how many people are dropped 
+  
+  n_rows_after <- nrow(df)
+  n_dropped <- n_rows - n_rows_after
+  print(paste('Number of dropped individuals:', n_dropped))
   
   return(df)
 }
@@ -163,11 +171,38 @@ f_create_outcomes <- function(df) {
   return(df)
 }
 
+f_train_test <- function(df, train_share=0.5) {
+  
+  #############################################################
+  #
+  # Create train/test split variable.
+  #
+  # df :    Dataset.
+  # train_share : Size of training data, default = 0.5
+  #
+  #############################################################
+  
+  n_rows <- nrow(df)
+  idx <- sort(sample(1:n_rows, round(train_share * n_rows)))
+  
+  # TRUE for training, FALSE for test set
+  df$training <- FALSE
+  df$training[idx] <- TRUE
+  
+  return(df)
+  
+}
+
 # ---------------------------------------------------------------------------- #
 # Preprocessing
 # ---------------------------------------------------------------------------- #
 
-db <- f_preprocessing(db, treatments_list, effects_var_list, random_sample=TRUE, seed=seed)
+db_pre <- f_preprocessing(db_raw, 
+                      treatments_list, 
+                      effects_var_list, 
+                      random_sample=FALSE, 
+                      train_share=0.5,
+                      seed=seed)
 
 
 # ---------------------------------------------------------------------------- #

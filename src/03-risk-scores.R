@@ -21,7 +21,7 @@ source("src/00-utils.R")
 set.seed(seed)
 
 # load data
-db = read.csv(effect_data_path)
+db_effects = read.csv(effect_data_path)
 
 # or run preprocessing
 # source("src/01-prepare-data.R")
@@ -142,11 +142,11 @@ f_risk_fair_experiments <- function(df,
   if (methods_all == TRUE) {
     methods <- c("sp-komiyama", "eo-komiyama", "if-berk")
     # steps <- 0.05
-    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.4,steps)
+    unfair_levels <- c(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.4,steps)
   } else {
     methods <- c("sp-komiyama", "eo-komiyama") 
     # steps <- 0.02
-    unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.2,steps)
+    unfair_levels <- c(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1) # seq(0,0.2,steps)
   }
   
   number_col <- length(methods) * length(unfair_levels)
@@ -170,7 +170,7 @@ f_risk_fair_experiments <- function(df,
                               unfairness = u, 
                               definition = m, 
                               family = "binomial", 
-                              lambda = 0.01,
+                              lambda = 0.049
       )
       y_score_fair_fgrrm <- predict(r.fair, 
                                     X_test, 
@@ -270,7 +270,7 @@ f_risk_fair_estimation <- function(X_train,
                             unfairness = method_fairness_list[[i]], 
                             definition = m, 
                             family = "binomial", 
-                            lambda = 0.01,
+                            lambda = 0,
     )
     y_score_fair_fgrrm <- predict(r.fair, 
                                   X_test, 
@@ -309,7 +309,7 @@ f_plot_fair_loss <- function(loss_list, method) {
   } else if (method=='if') {
     title <- 'Individual Fairness'
   }
-  unfair_levels <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1)
+  unfair_levels <- c(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1)
   selected_list <- loss_list[grep(paste0("^", method), names(loss_list))]
   
   min_idx <- which.min(selected_list)
@@ -328,7 +328,6 @@ f_risk_scores <- function(df,
                           var_list, 
                           outcome_name, 
                           sensitive_name, 
-                          train_share = 0.7, 
                           method_fairness_list,
                           quiet = FALSE) {
   
@@ -340,22 +339,25 @@ f_risk_scores <- function(df,
   # var_list :          List of variable names for prediction.
   # outcome_name :      String, name of outcome variable.
   # sensitive_name :    String, name of sensitive attribute variable.
-  # train_share :       Numeric, share of training data.
+  # -x- train_share :       Numeric, share of training data.
   # method_fairness_list : List of fairness method with unfairness constraint.
   # quiet :             Boolean.
   #
   #############################################################
   
   # train-test split
-  idx <- sample(1:nrow(df), train_share * nrow(df))
+  #idx <- sample(1:nrow(df), train_share * nrow(df))
+  train_idx <- df$training
   
   # data
-  X_train <- data.matrix(df[idx,var_list])
-  X_test <- data.matrix(df[-idx,var_list])
-  y_train <- as.factor(df[idx,outcome_name])
-  y_test <- as.factor(df[-idx,outcome_name])
-  s_train <- data.matrix(df[idx,sensitive_name])
-  s_test <- data.matrix(df[-idx,sensitive_name])
+  X_train <- data.matrix(df[train_idx,var_list])
+  X_test <- data.matrix(df[!train_idx,var_list])
+  
+  y_train <- as.factor(df[train_idx,outcome_name])
+  y_test <- as.factor(df[!train_idx,outcome_name])
+  
+  s_train <- data.matrix(df[train_idx,sensitive_name])
+  s_test <- data.matrix(df[!train_idx,sensitive_name])
   
   # logistic regression
   y_score_log <- f_risk_log_reg(X_train, 
@@ -374,13 +376,23 @@ f_risk_scores <- function(df,
                                     quiet = FALSE)
   
   # return results for test set
-  df <- df %>%
-    slice(-idx) %>%
-    mutate(risk_score_log := y_score_log,
-           risk_score_sp := risk_fair_scores[,1],
-           risk_score_eo := risk_fair_scores[,2],
-           risk_score_if := risk_fair_scores[,3]
-           )
+  if (length(method_fairness_list)==2) {
+    df <- df %>%
+      filter(training==0) %>%
+      mutate(risk_score_log := y_score_log,
+             risk_score_sp := risk_fair_scores[,1],
+             risk_score_eo := risk_fair_scores[,2]
+      )
+  } else {
+    df <- df %>%
+      filter(training==0) %>%
+      mutate(risk_score_log := y_score_log,
+             risk_score_sp := risk_fair_scores[,1],
+             risk_score_eo := risk_fair_scores[,2],
+             risk_score_if := risk_fair_scores[,3]
+      )
+  }
+
   
   return(df)
   
@@ -392,26 +404,68 @@ f_risk_scores <- function(df,
 outcome <- "y_exit12"
 sensitive_attribute <- "female"
 methods_fairness <- list("sp-komiyama" = 0.01,
-                         "eo-komiyama" = 0.01,
-                         "if-berk" = 0.01)
+                         "eo-komiyama" = 0.01
+                         #"if-berk" = 0.001
+                         )
 
-db <- f_risk_scores(db,
+db_risk <- f_risk_scores(db_effects,
                     risk_var_list,
                     outcome,
                     sensitive_attribute,
-                    train_share = 0.5,
                     methods_fairness)
 
 
-write.csv(db, file="data/1203_ALMP_Sample_effects_risk_fairFemale.csv")
+write.csv(db_risk, file="data/1203_ALMP_effects_risk_fairFemale_001.csv")
+
+
 
 # ---------------------------------------------------------------------------- #
 # analysis
+library(grf)
 
-acc_parity(db, "y_exit12", "female", probs = "risk_score_log")
-acc_parity(db, "y_exit12", "swiss", probs = "risk_score_log")
+f_probability_forest <- function(df, var_list, outcome_name, train_share = 0.8, seed=12345) {
+  
+  #############################################################
+  #
+  #
+  #
+  #
+  #############################################################
+  
+  # train-test split
+  idx <- sample(1:nrow(df), train_share * nrow(df))
+  
+  # data
+  X_train <- data.matrix(df[idx,var_list])
+  X_test <- data.matrix(df[-idx,var_list])
+  y_train <- as.factor(df[idx,outcome_name])
+  y_test <- as.factor(df[-idx,outcome_name])
 
-dem_parity(db, "y_exit12", "female", probs = "risk_score_log")
+  p.forest <- probability_forest(X_train, 
+                                 y_train, 
+                                 seed = seed)
+  
+  y_scores <- predict(p.forest, X_test)
+  
+  result = list(y_scores = y_scores, y_true = y_test)
+  return(result)
+}
+
+
+y_forest_test <- f_probability_forest(db, risk_var_list, outcome)
+y_pred_test <- ifelse(y_forest_test$y_scores[[1]][,1] >= 0.8, 1, 0)
+# accuracy: not over 0.58
+mean(y_forest_test$y_true == y_pred_test)
+
+acc_parity(db_risk, "y_exit12", "female", probs = "risk_score_log")
+acc_parity(db_risk, "y_exit12", "swiss", probs = "risk_score_log")
+
+dem_parity(db_risk, "y_exit12", "female", probs = "risk_score_log")
+dem_parity(db_risk, "y_exit12", "female", probs = "risk_score_sp")
+dem_parity(db_risk, "y_exit12", "female", probs = "risk_score_eo")
+dem_parity(db_risk, "y_exit12", "female", probs = "risk_score_if")
+
+
 dem_parity(db, "y_exit12", "swiss", probs = "risk_score_log")
 
 equal_odds(db, "y_exit12", "female", probs = "risk_score_log")
@@ -490,9 +544,15 @@ db <- f_risk_logistic_reg(db, risk_var_list, outcome, cv=4)
 # Fair Risk Scores: Experiments
 # ---------------------------------------------------------------------------- #
 
-risk_fair_female <- f_risk_fair_experiments(db, risk_var_list, outcome, 'female', methods_all = FALSE, loss = 'mse')
+risk_fair_female <- f_risk_fair_experiments(db_effects, 
+                                            risk_var_list, 
+                                            outcome, 
+                                            'female', 
+                                            train_share = 0.8,
+                                            methods_all = FALSE, 
+                                            loss = 'mse')
 # TODO what the fuck?
-risk_fair_swiss <- f_risk_fair_experiments(db, risk_var_list, outcome, 'swiss', methods_all = FALSE, loss = 'mse')
+#risk_fair_swiss <- f_risk_fair_experiments(db, risk_var_list, outcome, 'swiss', methods_all = FALSE, loss = 'mse')
 
 
 f_plot_fair_loss(risk_fair_female$loss_list, "sp")
@@ -500,10 +560,20 @@ f_plot_fair_loss(risk_fair_female$loss_list, "eo")
 f_plot_fair_loss(risk_fair_female$loss_list, "if")
 
 
-f_plot_fair_loss(risk_fair_swiss$loss_list, "sp")
-f_plot_fair_loss(risk_fair_swiss$loss_list, "eo")
-f_plot_fair_loss(risk_fair_swiss$loss_list, "if")
+# f_plot_fair_loss(risk_fair_swiss$loss_list, "sp")
+# f_plot_fair_loss(risk_fair_swiss$loss_list, "eo")
+# f_plot_fair_loss(risk_fair_swiss$loss_list, "if")
 
+fairness.profile.plot(response = as.factor(db$y_exit12), 
+                      predictors = data.matrix(db[,risk_var_list]), 
+                      sensitive = as.factor(db$female),
+                      type = "constraints",
+                      unfairness = seq(0,1,by=0.02),
+                      legend = TRUE,
+                      model = "fgrrm",
+                      model.args = list(definition = "sp-komiyama",
+                                        family = "binomial",
+                                        lambda = 0.001))
 
 
 # ---------------------------------------------------------------------------- #

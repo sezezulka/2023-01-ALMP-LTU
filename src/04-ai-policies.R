@@ -15,7 +15,7 @@ source("src/00-utils.R")
 set.seed(seed)
 
 # db = read.csv(effect_risk_data_path)
-db <- read.csv("data/1203_ALMP_Sample_effects_risk_fairFemale.csv")
+db <- read.csv("data/1203_ALMP_effects_risk_fairFemale.csv")
 
 
 # ---------------------------------------------------------------------------- #
@@ -346,6 +346,9 @@ f_greedy_allocation <- function(df, list_programs, effect_type, assignment_type,
       
       # update program capacities
       list_programs <- f_update_capacities(list_programs, assigned_program_name)
+      
+      # TODO if only one program left, assign everyone this program
+      
     } else {
       
         stop("Error: No program capacity before loop has closed.") 
@@ -387,6 +390,48 @@ f_program_2_iapo <- function(df, new_outcome_name) {
   return(df)
 }
 
+f_average_random_runs <- function(df, policy_names, n_iter = 10) {
+  
+  #############################################################
+  #
+  # df : 
+  # policy_name_later : Vector of Policy names
+  # n_iter :            Number of iterations per policy.
+  #
+  #############################################################
+  
+  # select all iapo results from random runs 
+  df_runs <- df %>%
+    select(matches("(run.*iapo)|(iapo.*run)")) 
+  
+  count <- ncol(df_runs) / n_iter
+  df_average_random <- matrix(NA, nrow(df_runs), count)
+  df_sd_random <- matrix(NA, nrow(df_runs), count)
+  
+  # average over runs from one policy
+  for (i in 1:count) {
+    start_col <- (i - 1) * 10 + 1
+    end_col <- i * 10
+    
+    average_iapo <- rowMeans(df_runs[,start_col:end_col], na.rm = TRUE)
+    sd_iapo <- apply(df_runs[,start_col:end_col], 1, sd)
+    
+    df_average_random[,i] <- average_iapo
+    df_sd_random[,i] <- sd_iapo
+  }
+  
+  colnames(df_average_random) <- paste0("iapo_", policy_names)
+  colnames(df_sd_random) <- paste0("sd_", policy_names)
+  
+  # drop run variables 
+  df <- df %>%
+    select(-matches("run"))
+  
+  df <- cbind.data.frame(df, df_average_random, df_sd_random)
+  return(df)
+}
+
+
 # ---------------------------------------------------------------------------- #
 # Simulations
 # ---------------------------------------------------------------------------- #
@@ -397,21 +442,39 @@ risk_scores <- c("risk_score_log", "risk_score_sp", "risk_score_eo", "risk_score
 assignment_style <- c("upper", "lower") # "emp"
 capacitiy_multiplier <- seq(1,5)
 
+policy_name_later <- c()
+
 for (p in policy_style) {
   for (a in assignment_style) {
     for (r in risk_scores) {
       for (c in capacitiy_multiplier) {
-        
-        policy_name <- paste("policy", p, r, a, c, sep="_")
-        print(paste0("Next policy: ", policy_name))
-        
-        db <- f_alg_policy(db, p, r, a, policy_name, c)
+          
+        if (a=="lower") {
+          # save policy names for averaging 
+          p_name <- paste("policy", p, r, a, c, sep="_")
+          policy_name_later <- c(policy_name_later, p_name)
+            
+          for (i in seq(1:10)) {
+            # run random assignment 10x
+            policy_name <- paste("policy", p, r, a, "run", i, c, sep="_")
+            print(paste0("Next policy: ", policy_name))
+              
+            db <- f_alg_policy(db, p, r, a, policy_name, c)
+          }
+        } else {
+          # assign most efficient program  
+          policy_name <- paste("policy", p, r, a, c, sep="_")
+          print(paste0("Next policy: ", policy_name))
+            
+          db <- f_alg_policy(db, p, r, a, policy_name, c)
+        }
       }
     }
   }
 }
 
-# TODO run simulations 10 times and average risk scores
+# average over iteration of random assignments and add mean/sd to data
+db <- f_average_random_runs(db, policy_name_later, n_iter=10)
 
 
 # ---------------------------------------------------------------------------- #
@@ -518,6 +581,7 @@ f_vis_LTU(db, "Austrian", "swiss", "Gender")
 
 
 
+write.csv(db, file="data/1203_ALMP_effects_risk_fairFemale_sim.csv")
 
 
 
@@ -587,7 +651,6 @@ ggplot(means_long, aes(x = multiplier,
 
 
 # ---------------------------------------------------------------------------- #
-write.csv(db, file="data/1203_ALMP_Sample_Simulations_fairfemale.csv")
 
 # ---------------------------------------------------------------------------- #
 # analysis

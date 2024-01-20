@@ -23,9 +23,13 @@ package_list <- c("tidyverse", "grf", "devtools", "policytree", "gt", "Hmisc")
 
 raw_data_path <- c("data/swissubase_1203_1_0/1203_ALMP_Data_E_v1.0.0.csv")
 
-effect_data_path <- c("data/1203_ALMP_Sample_IATEs.csv")
+pre_data_path <- c("data/1203_ALMP.csv")
 
-effect_risk_data_path <- c("data/1203_ALMP_Sample_IATEs_fair_risk.csv")
+effect_data_path <- c("data/1203_ALMP_effects.csv")
+
+risk_data_path <- c("data/1203_ALMP_effects_risk_fairFemale.csv")
+
+sim_data_path <- c("data/1203_ALM_effects_risk_fairFemale_sim.csv")
 
 effects_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no",
                       "cw_age","cw_cooperative","cw_educ_above_voc","cw_educ_tertiary",
@@ -45,7 +49,7 @@ risk_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no"
                    "prev_job_manager","prev_job_sec_mis","prev_job_sec1","prev_job_sec2",
                    "prev_job_sec3","prev_job_self","prev_job_skilled","prev_job_unskilled",
                    "qual_semiskilled","qual_degree","qual_unskilled","qual_wo_degree",
-                   "swiss","ue_spells_last_2yrs","unemp_rate"
+                   "swiss","ue_spells_last_2yrs","unemp_rate", "foreigner_married"
                    )
 
 treatments_list <- c("no program", "vocational", "computer", "language", "job search", "employment", "personality")

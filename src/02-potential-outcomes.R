@@ -11,8 +11,10 @@ library(policytree)
 wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
 setwd(wd_path)
 
-source("src/01-prepare-data.R")
+source("src/00-utils.R")
 set.seed(seed)
+
+db_pre <- read.csv(pre_data_path)
 
 # ---------------------------------------------------------------------------- #
 # Preparations
@@ -46,7 +48,7 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
   cfm = prep_cf_mat(nrow(df), 
                     cv, 
                     wm)
-  x <- data.matrix(df[,var_list])
+  X <- data.matrix(df[,var_list])
   y <- df[,outcome_name]
   
   # create methods
@@ -58,7 +60,7 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
   # estimate propensity scores
   em = nuisance_e(list(forest),
                   wm, 
-                  x, 
+                  X, 
                   cfm, 
                   cv=cv, 
                   path=NULL, 
@@ -68,7 +70,7 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
   mm = nuisance_m(list(forest),
                   y, 
                   wm, 
-                  x, 
+                  X, 
                   cfm, 
                   cv=cv, 
                   path=NULL, 
@@ -83,11 +85,11 @@ f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv
   
   # estimate smoothed IAPOs
   bound_list <- list(TRUE, 1, 0)
+  train_idx <- df$training
   theta <- f_smoothed_iapos(wm, 
                             dr_scores$gamma, 
-                            x,
-                            cfm,
-                            cv=cv, 
+                            X,
+                            train_idx,
                             seed=seed, 
                             bound_outcomes=bound_list[[1]], 
                             up=bound_list[[2]], 
@@ -179,7 +181,7 @@ f_gamma <- function(w_mat, nui_outcomes, ipw_mat, outcomes) {
   return(gamma)
 }
 
-f_smoothed_iapos <- function(w_mat, gamma, x, cfm, cv=4, seed=12345, bound_outcomes=TRUE, up=1, low=0) {
+f_smoothed_iapos <- function(w_mat, gamma, x, train_test_idx, bound_outcomes=TRUE, up=1, low=0, seed=12345) {
   
   #############################################################
   # 
@@ -189,12 +191,13 @@ f_smoothed_iapos <- function(w_mat, gamma, x, cfm, cv=4, seed=12345, bound_outco
   # w_mat :           Matrix of binary treatment indicators (n x T+1)
   # gamma :           Matrix of DR potential outcomes (n x T+1)
   # x :               Covariate matrix (n x d)
-  # cfm :             Matrix of binary cross-fitting fold indicators (n x # cross-folds).
-  # cv :              Number of cross-validations, default = 4.
-  # seed :            Seed, default = 12345.
+  # -x- cfm :             Matrix of binary cross-fitting fold indicators (n x # cross-folds).
+  # train_test_idx :  Vector for train-test split.
+  # -x- cv :              Number of cross-validations, default = 4.
   # bound_outcomes :  Boolean: True if results are to be bounded in range.
   # up :              Upper bound of range.
   # low :             Lower bound of range.
+  # seed :            Seed, default = 12345.
   #
   #############################################################
   
@@ -203,20 +206,27 @@ f_smoothed_iapos <- function(w_mat, gamma, x, cfm, cv=4, seed=12345, bound_outco
   
   for (i in 1:ncol(w_mat)) {
     
-    # cross-validation (theta)
-    # TODO check cv logic in combination with grf function regression_forest
-    t = matrix(NA, nrow(cfm), ncol(cfm))
+    # train-test (theta)
+    r.forest <- regression_forest(x[train_test_idx,], 
+                                  gamma[train_test_idx,i], 
+                                  tune.parameters = 'all', 
+                                  seed=seed) 
+    theta[!train_test_idx,i] <- predict(r.forest, x[!train_test_idx,])$predictions
     
-    for (c in 1:cv) {
-      oos = cfm[,c]
-      r.forest <- regression_forest(x[!oos,], 
-                                    gamma[!oos,i], 
-                                    tune.parameters = 'all', 
-                                    seed=seed) 
-      t[oos,c] <- predict(r.forest, x[oos,])$predictions
-      
-    }
-    theta[,i] <- rowSums(t, na.rm = TRUE)
+    # with cv for whole dataset
+    # t = matrix(NA, nrow(cfm), ncol(cfm))
+    # 
+    # 
+    # for (c in 1:cv) {
+    #   oos = cfm[,c]
+    #   r.forest <- regression_forest(x[!oos,], 
+    #                                 gamma[!oos,i], 
+    #                                 tune.parameters = 'all', 
+    #                                 seed=seed) 
+    #   t[oos,c] <- predict(r.forest, x[oos,])$predictions
+    #   
+    # }
+    # theta[,i] <- rowSums(t, na.rm = TRUE)
     
     cat('Variable:', i, 'of', ncol(w_mat), '.\n')
   }
@@ -281,7 +291,7 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   cfm = prep_cf_mat(nrow(df), 
                     cv, 
                     wm)
-  x <- data.matrix(df[,var_list])
+  X <- data.matrix(df[,var_list])
   y <- df[,outcome_name]
   
   # create methods
@@ -293,7 +303,7 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   # estimation
   cDML = DML_aipw(y,
                   w,
-                  x,
+                  X,
                   ml_w=list(forest),
                   ml_y=list(forest),
                   quiet=FALSE
@@ -352,7 +362,7 @@ f_ndr_learner <- function(df, treatments_list, var_list, outcome_name,cv=4) {
 
 outcome <- 'y_exit12'
 no_cv <- 4
-db <- f_potential_outcomes(db, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
+db_effects <- f_potential_outcomes(db_pre, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
 
 # analyse
 db %>% select(starts_with('iate_')) %>% colMeans()
@@ -361,22 +371,65 @@ db %>% select(starts_with('iapo_')) %>% summary(., mean())
   
 # ---------------------------------------------------------------------------- #
 # save
-write.csv(db, file="data/1203_ALMP_Sample_IATEs.csv")
+write.csv(db, file="data/1203_ALMP_effects.csv")
 # ---------------------------------------------------------------------------- #
 
+
+# ---------------------------------------------------------------------------- #
+# Standard Errors
+# ---------------------------------------------------------------------------- #
+
+f_se_t_p <- function(df_effects, treatments_list) {
+  
+  # create treatment list for simulation data
+  w <- df_effects[df_effects$training==0, "treatment6"]
+  w = factor(w, treatments_list)
+  wm = prep_w_mat(w)
+  
+  df_iates <- df_effects %>%
+    filter(training==0) %>%
+    select(starts_with('iate_')) 
+  
+  results_iate <- matrix(NA, ncol(wm)-1, 6)
+  colnames(results_iate) <- c("ATE", "SE", "CI_low", "CI_up", "t", "p")
+  rownames(results_iate) = rep("Platzhalter",nrow(results_iate))
+  
+  for (i in 1:(ncol(wm)-1)) {
+    
+    # ATE
+    results_iate[i,1] <- mean(df_iates[,i])
+    # SE ATE
+    results_iate[i,2] <- sqrt(mean((df_iates[,i]-mean(df_iates[,i]))^2) / nrow(wm)) 
+    
+    # 95%-CI lower
+    results_iate[i,3] <- results_iate[i,1] - ((1.28 * results_iate[i,2]) / sqrt(nrow(wm)))
+    # 95%-CI upper
+    results_iate[i,4] <- results_iate[i,1] + ((1.28 * results_iate[i,2]) / sqrt(nrow(wm)))
+    
+    rownames(results_iate)[i] = paste(colnames(wm)[i+1],"-",colnames(wm)[1])
+  }
+  
+  # t-stat
+  results_iate[,5] = results_iate[,1] / results_iate[,2]
+  # p-value
+  results_iate[,6] = 2 * stats::pt(abs(results_iate[,3]),nrow(wm),lower = FALSE)
+  
+  return(results_iate)
+}
+
+iate_results_test <- f_se_t_p(db_sim, treatments_list)
 
 
 # ---------------------------------------------------------------------------- #
 # compare results
 # ---------------------------------------------------------------------------- #
 
-
-cDML <- f_cDML(db, treatments_list, effects_var_list, outcome)
-
+cDML <- f_cDML(db_pre, treatments_list, effects_var_list, outcome)
+ 
 summary(cDML$ATE)
-
-ndr <- f_ndr_learner(db, treatments_list, effects_var_list, outcome)
-# TODO Fehler: honest fraction too close to 1 or 0
+ 
+# ndr <- f_ndr_learner(db, treatments_list, effects_var_list, outcome)
+# # TODO Fehler: honest fraction too close to 1 or 0
 
 # ---------------------------------------------------------------------------- #
 # End
