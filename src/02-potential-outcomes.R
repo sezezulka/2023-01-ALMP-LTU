@@ -402,9 +402,9 @@ f_se_t_p <- function(df_effects, treatments_list) {
     results_iate[i,2] <- sqrt(mean((df_iates[,i]-mean(df_iates[,i]))^2) / nrow(wm)) 
     
     # 95%-CI lower
-    results_iate[i,3] <- results_iate[i,1] - ((1.28 * results_iate[i,2]) / sqrt(nrow(wm)))
+    results_iate[i,3] <- results_iate[i,1] - ((1.65 * results_iate[i,2]) / sqrt(nrow(wm)))
     # 95%-CI upper
-    results_iate[i,4] <- results_iate[i,1] + ((1.28 * results_iate[i,2]) / sqrt(nrow(wm)))
+    results_iate[i,4] <- results_iate[i,1] + ((1.65 * results_iate[i,2]) / sqrt(nrow(wm)))
     
     rownames(results_iate)[i] = paste(colnames(wm)[i+1],"-",colnames(wm)[1])
   }

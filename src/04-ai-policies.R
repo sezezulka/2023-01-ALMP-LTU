@@ -139,11 +139,11 @@ f_risk_2_policy <- function(df, policy_name, risk_score_name) {
     # first select individuals with middle risk_scores, then rest
     df_middle <- df %>% 
       arrange(desc( !!sym(risk_score_name) )) %>%
-      filter( !!sym(risk_score_name) <= 0.7 & !!sym(risk_score_name)  >= 0.3)
+      filter( !!sym(risk_score_name) <= 0.66 & !!sym(risk_score_name)  >= 0.25)
     
     df_rest <- df %>%
       arrange(desc( !!sym(risk_score_name) )) %>%
-      filter( !!sym(risk_score_name) > 0.7 | !!sym(risk_score_name) < 0.3) %>%
+      filter( !!sym(risk_score_name) > 0.66 | !!sym(risk_score_name) < 0.25) %>%
       # random order across non-selected individuals
       sample_n(nrow(.))
     
@@ -437,9 +437,9 @@ f_average_random_runs <- function(df, policy_names, n_iter = 10) {
 # ---------------------------------------------------------------------------- #
 
 # policy choices
-policy_style <- c("Belgian", "Austrian")
-risk_scores <- c("risk_score_log", "risk_score_sp", "risk_score_eo", "risk_score_if")
-assignment_style <- c("upper", "lower") # "emp"
+policy_style <- c("Austrian") # , "Belgian"
+risk_scores <- c("risk_score_log", "risk_score_sp", "risk_score_eo") #, "risk_score_if")
+assignment_style <- c("upper", "lower") # , "emp"
 capacitiy_multiplier <- seq(1,5)
 
 policy_name_later <- c()

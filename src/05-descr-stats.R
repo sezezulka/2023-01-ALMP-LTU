@@ -20,7 +20,7 @@ db_sim = read.csv("data/1203_ALMP_effects_risk_fairFemale_sim.csv")
 # ---------------------------------------------------------------------------- #
 # descriptive statistics
 # ---------------------------------------------------------------------------- #
-summary_table_overall <- db_sim %>%
+summary_table_overall <- db_effects %>%
   # filter(training==0) %>%
   summarise(
     Obs = n(),
@@ -32,8 +32,8 @@ summary_table_overall <- db_sim %>%
     Avg_Past_Income = mean(past_income)
   )
 
-summary_table_treatment <- db_sim %>%
-  filter(training==0) %>%
+summary_table_treatment <- db_effects %>%
+  # filter(training==0) %>%
   group_by(treatment6) %>%
   summarise(
     Obs = n(),

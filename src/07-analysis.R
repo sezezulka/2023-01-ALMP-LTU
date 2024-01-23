@@ -1,6 +1,7 @@
 library(tidyverse)
 library(gridExtra)
 library(grid)
+
 file="data/1203_ALMP_effects_risk_fairFemale_sim.csv"
 test_db = read.csv(file)
 
@@ -200,13 +201,13 @@ gendergap_upper <- ggplot(f_long_nofair_upper,
   geom_ribbon(alpha = .2) +
   geom_line(aes(y = mean_value), 
             size = 1) +
-  geom_line(aes(y = female_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05)) +
-  geom_line(aes(y = male_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05))+
-  geom_point(size = 6, shape = 18, position = position_dodge(width = 0.1)) +
+  # geom_line(aes(y = female_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05)) +
+  # geom_line(aes(y = male_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05))+
+  geom_point(size = 6, shape = 18, position = position_dodge(width = 0.05)) +
   geom_point(aes(y = female_mean), color = 'black', size = 4, shape = 17, alpha = 1,
-             position = position_dodge(width = 0.1)) +
+             position = position_dodge(width = 0.05)) +
   geom_point(aes(y = male_mean), color = 'black', size = 4, shape = 16, alpha = 1,
-             position = position_dodge(width = 0.1)) +
+             position = position_dodge(width = 0.05)) +
   geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17, color = "black") +
   geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16, color = "black") +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
@@ -617,7 +618,7 @@ grid.arrange(arrangeGrob(fairness_belgian_upper + theme(legend.position="none"),
 #  LTU Gender Gap Analysis by (non)Swiss and (non)Married
 #
 ###################################################
-
+test_db <- db_sim
 #NONSWISS NONMARRIED
 
 gender_df <-test_db %>%
@@ -629,8 +630,8 @@ df <-test_db %>%
   filter(test_db$swiss==0 & test_db$married==0 ) %>%
   summarise(across(all_of(selected_vars), mean))
 
-gender_long <- reshape_long(gender_df)
-long <- reshape_long(df)
+gender_long <- f_reshape_long(gender_df)
+long <- f_reshape_long(df)
 
 gender_long[ , ncol(gender_long) + 1] <- 0                  # Create column for upper/lower/empirical assignment strategy
 colnames(gender_long)[ncol(gender_long)] <-"female_mean"  # Rename column name
@@ -658,20 +659,28 @@ belgiumcolor="#1704E0"
 austriacolor="#E03D2B"
 
 
-unmarried_nonswiss<-ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
-  geom_point()+
+  geom_point(size = 4, shape = 18) +
+  geom_point(aes(y = female_mean, shape = as.factor(female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
+  geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
   #ylim(.3,.5) +
   geom_line(aes(y = mean_value),size=1) +
   geom_line(aes(y = female_mean), colour = 'black') +
   geom_line(aes(y = male_mean), colour = 'black')+
-  labs(title = "Non-Swiss, Unmarried",
+  labs(#title = "Non-Citizen, Unmarried",
        x = "Capacity Multiplier",
        y = "LTU Share")+
+  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+                     labels = c("0" = "Male", "1" = "Female")) +
   scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
   scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
   theme_classic()+
-  theme(legend.position = "bottom")
+  theme(legend.position =  "none",
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16))
 
 
 #NONSWISS MARRIED
@@ -685,8 +694,8 @@ df <-test_db %>%
   filter(test_db$swiss==0 & test_db$married==1 ) %>%
   summarise(across(all_of(selected_vars), mean))
 
-gender_long <- reshape_long(gender_df)
-long <- reshape_long(df)
+gender_long <- f_reshape_long(gender_df)
+long <- f_reshape_long(df)
 
 gender_long[ , ncol(gender_long) + 1] <- 0                  # Create column for upper/lower/empirical assignment strategy
 colnames(gender_long)[ncol(gender_long)] <-"female_mean"  # Rename column name
@@ -714,20 +723,28 @@ belgiumcolor="#1704E0"
 austriacolor="#E03D2B"
 
 
-married_nonswiss<-ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
-  geom_point()+
+  geom_point(size = 4, shape = 18) +
+  geom_point(aes(y = female_mean, shape = as.factor(female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
+  geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
   #ylim(.3,.5) +
   geom_line(aes(y = mean_value),size=1) +
   geom_line(aes(y = female_mean), colour = 'black') +
   geom_line(aes(y = male_mean), colour = 'black')+
-  labs(title = "Non-Swiss, Married",
+  labs(# title = "Non-Swiss, Married",
        x = "Capacity Multiplier",
        y = "LTU Share")+
   scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
   scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
+  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+                     labels = c("0" = "Male", "1" = "Female")) +
   theme_classic()+
-  theme(legend.position = "bottom")
+  theme(legend.position =  "none",
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16))
 
 
 
@@ -742,8 +759,8 @@ df <-test_db %>%
   filter(test_db$swiss==1 & test_db$married==1 ) %>%
   summarise(across(all_of(selected_vars), mean))
 
-gender_long <- reshape_long(gender_df)
-long <- reshape_long(df)
+gender_long <- f_reshape_long(gender_df)
+long <- f_reshape_long(df)
 
 gender_long[ , ncol(gender_long) + 1] <- 0                  # Create column for upper/lower/empirical assignment strategy
 colnames(gender_long)[ncol(gender_long)] <-"female_mean"  # Rename column name
@@ -771,20 +788,28 @@ belgiumcolor="#1704E0"
 austriacolor="#E03D2B"
 
 
-married_swiss<-ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
-  geom_point()+
+  geom_point(size = 4, shape = 18) +
+  geom_point(aes(y = female_mean, shape = as.factor(female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
+  geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
   #ylim(.3,.5) +
   geom_line(aes(y = mean_value),size=1) +
   geom_line(aes(y = female_mean), colour = 'black') +
   geom_line(aes(y = male_mean), colour = 'black')+
-  labs(title = "Swiss, Married",
-       x = "Capacity Multiplier",
-       y = "LTU Share")+
+  labs(# title = "Non-Swiss, Married",
+    x = "Capacity Multiplier",
+    y = "LTU Share")+
   scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
   scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
-  theme_classic()
-  theme(legend.position = "bottom")
+  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+                     labels = c("0" = "Male", "1" = "Female")) +
+  theme_classic()+
+  theme(legend.position =  "none",
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16))
 
 #SWISS NONMARRIED
 
@@ -797,8 +822,8 @@ df <-test_db %>%
   filter(test_db$swiss==1 & test_db$married==0 ) %>%
   summarise(across(all_of(selected_vars), mean))
 
-gender_long <- reshape_long(gender_df)
-long <- reshape_long(df)
+gender_long <- f_reshape_long(gender_df)
+long <- f_reshape_long(df)
 
 gender_long[ , ncol(gender_long) + 1] <- 0                  # Create column for upper/lower/empirical assignment strategy
 colnames(gender_long)[ncol(gender_long)] <-"female_mean"  # Rename column name
@@ -826,24 +851,43 @@ belgiumcolor="#1704E0"
 austriacolor="#E03D2B"
 
 
-unmarried_swiss<-ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+ggplot(f_long_nofair_upper, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
-  geom_point()+
+  geom_point(size = 4, shape = 18) + 
+  geom_point(aes(y = female_mean, shape = as.factor(female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
+  geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
+             color = 'black', size = 2, alpha = 1, position = position_dodge(width = 0.05)) +
   #ylim(.3,.5) +
   geom_line(aes(y = mean_value),size=1) +
   geom_line(aes(y = female_mean), colour = 'black') +
   geom_line(aes(y = male_mean), colour = 'black')+
-  labs(title = "Swiss, Unmarried",
+  labs(# title = "Swiss, Unmarried",
        x = "Capacity Multiplier",
        y = "LTU Share")+
-  scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
-  scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
-  theme_classic()+
-  theme(legend.position = "bottom")
+  scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor),
+                    name = "Policy:") +
+  scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor),
+                      name = "Policy:") +
+  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+                     labels = c("0" = "Male", "1" = "Female")) +
+  theme_classic() +
+  theme(legend.position = c(0.01, 0.01), 
+        legend.justification = c("left", "bottom"), 
+        legend.box.just = "left",
+        # legend.box.background = element_rect(color="black", size=2),
+        legend.background = element_rect(fill = alpha("white", 0)),
+        legend.key.size = unit(1, 'cm'),
+        legend.key = element_rect(colour = "black"),
+        legend.text = element_text(size = 16, colour = "black"),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.direction = "horizontal",
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16)) 
 
 
 
-legend<-g_legend(unmarried_nonswiss)
+legend<-g_legend(unmarried_swiss)
 
 grid.arrange(arrangeGrob(unmarried_nonswiss + theme(legend.position="none"),
                          married_nonswiss + theme(legend.position="none"),
