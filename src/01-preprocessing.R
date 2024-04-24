@@ -1,31 +1,50 @@
 # ---------------------------------------------------------------------------- #
-# 01-Data Preparation
+# 01-preprocessing
 # ---------------------------------------------------------------------------- #
 # 
-# Sources:
-# - Knaus (2022)
-# https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/code/
-# Data_preparation_MCK2020.R
-# - Körtner and Bach (2023)
+# Run this script to prepare the raw data "Swiss Active Labor Market Policy
+# Dataset, Ref. 1203", available at Siwssbase, for the estimation of potential 
+# outcomes of the recorded labor market programs.  
+#
+# ---------------------------------------------------------------------------- #
+# Author: Sebastian Zezulka
+# 2024-04-24
+# 
+# ---------------------------------------------------------------------------- #
+# Data: 
+# Michael Lechner, Michael Knaus, Martin Huber, Markus Frölich, Stefanie Behncke,
+# Giovanni Mellace, Anthony Strittmatter (2020). Swiss Active Labor Market 
+# Policy Evaluation [Dataset]. Distributed by FORS, Lausanne. 
+# https://doi.org/10.23662/FORS-DS-1203-1
+#
+# This code is based on the publications by:
+# 1. Michael C. Knaus (2022). Double machine learning-based programme evaluation
+# under unconfoundedness.The Econometrics Journal.
+# see especially: 
+# https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/code/Data_preparation_MCK2022.R
+# 
+# 2. John Körtner and Ruben L. Bach (2023). Inequality-Averse Outcome-Based Matching. 
+# 
+# Many thanks to John Körtner and Ruben Bach for sharing their code as well as 
+# for many helpful discussions to Michael Knaus.
+# All remaining errors are my own.
 #
 # ---------------------------------------------------------------------------- #
 
-# set working directory 
-wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
-setwd(wd_path)
 
-# load config 
-source("src/00-utils.R")
-
-# libraries
-library(tidyverse)
-library(grf)
+# Execute "00-config.R" first.
 
 # set seed
 set.seed(seed)
 
-# read data
-db_raw = read.csv(raw_data_path)
+# ---------------------------------------------------------------------------- #
+# Libraries
+library(tidyverse)
+library(grf)
+
+# ---------------------------------------------------------------------------- #
+# Data
+db_raw = read.csv(data_path_raw)
 
 # ---------------------------------------------------------------------------- #
 # Functions
@@ -35,22 +54,24 @@ f_preprocessing <- function(df, treatment_list, var_list, random_sample=FALSE, t
   
   #############################################################
   # 
-  # Pre-processing of data frame. 
-  # Add original ID, remove non German speaking cantons, keep  only specified 
+  # Pre-processing of raw data. 
+  # Adds original IDs, removes non German speaking cantons, keeps only specified 
   # programs, and (optionally) create 30% sample.
-  # Create pseudo random starting points.
-  # Create outcome variables.
+  # Creates pseudo random starting points.
+  # Creates the outcome variables.
   #
   # df :                Dataset
   # treatment_list :    List of treatments to be kept. 
   # var_list :          List of variables for covariate matrix.
-  # random_sample :     Boolean, true if df is reduced to 30% sample.
+  # random_sample :     Boolean, true if df is to be reduced to 30% sample.
   # train_share :       Size of training data, default = 0.5.
   # seed :              Seed, default = 12345.
+  #
+  # Outputs pre-processed data frame.
   # 
   #############################################################
   
-  df <- df %>%
+  df <- df %>% 
     mutate(ID = row_number()) %>%
     select(ID, dplyr::everything()) %>%
     filter(canton_german == 1) %>%
@@ -78,17 +99,20 @@ f_pseudo_random_starting <- function(df, var_list, seed=12345) {
   
   #############################################################
   # 
-  # Generate pseudo random program starting points for those in "no program".
+  # Generates pseudo random program starting points for those 
+  # in "no program".
   #
   # df :          Dataset, requires variables "treatment6" and "start_q2"
   # var_list :    List of variable names for covariate matrix.
   # seed :        Seed, default = 12345.
   #
-  # Note coded treatment6 and start_q2 variables!
+  # Outputs data frame.
+  #
+  # Note the hard-coded treatment6 and start_q2 variables!
   #
   #############################################################
   
-  # make covariate matrix
+  # create covariate matrix
   x <- data.matrix(df[,var_list])
   
   # assign pseudo random starting
@@ -120,7 +144,7 @@ f_create_outcomes <- function(df) {
   
   #############################################################
   #
-  # Create outcome variables, y. Returns df.
+  # Creates outcome variables: y. Returns data frame.
   #
   # df :    Dataset.
   # 
@@ -134,7 +158,7 @@ f_create_outcomes <- function(df) {
     stop("Error: Do not apply function twice.")
   }
   
-  # 1. outcome y_emp: 
+  # First outcome: y_emp 
   # months in employment in 31 months after treatment start
   emp <- matrix(NA, nrow(df), 31)
   
@@ -142,7 +166,7 @@ f_create_outcomes <- function(df) {
   emp[df$elap == 1,] <- as.matrix(df[df$elap == 1, c(sprintf("employed%s", seq(6,36)))])
   df$y_emp = rowSums(emp)
   
-  # 2. outcome y_unemp: 
+  # Second outcome: y_unemp 
   # duration of first unemployment spell (first month of employment or 37)
   df$y_unemp <- df$employed1
   
@@ -159,15 +183,15 @@ f_create_outcomes <- function(df) {
   df$y_unemp <- ifelse(df$y_unemp == 0, 37, df$y_unemp)
   df$y_unemp <- df$y_unemp - 1
   
-  # 3. outcome y_exit12: 
-  # long-term unemployment (12 month unemployment after (pseudo) program start)
+  # Third outcome: y_exit12 
+  # binary variable, long-term unemployed if at least 12 month unemployment after (pseudo) program start
   df$y_exit12 <- NA
   df$y_exit12[df$elap == 0] <- ifelse(df$y_unemp[df$elap == 0] > 15, 1, 0)
   df$y_exit12[df$elap == 1] <- ifelse(df$y_unemp[df$elap == 1] > 18, 1, 0)
   
-  # version from Körtner/Bach
+  # Note change in comparison with Körtner and Bach (2023), who used
   # df$y_exit12 <- ifelse(df$y_unemp > 12, 1, 0)
-  
+
   return(df)
 }
 
@@ -177,8 +201,10 @@ f_train_test <- function(df, train_share=0.5) {
   #
   # Create train/test split variable.
   #
-  # df :    Dataset.
+  # df :          Dataset.
   # train_share : Size of training data, default = 0.5
+  #
+  # Returns data frame.
   #
   #############################################################
   
@@ -198,12 +224,13 @@ f_train_test <- function(df, train_share=0.5) {
 # ---------------------------------------------------------------------------- #
 
 db_pre <- f_preprocessing(db_raw, 
-                      treatments_list, 
-                      effects_var_list, 
-                      random_sample=FALSE, 
-                      train_share=0.5,
-                      seed=seed)
+                          treatments_list,
+                          effects_var_list, 
+                          random_sample=FALSE, 
+                          train_share=0.5,
+                          seed=seed)
 
+write.csv(db_pre, file=data_path_pre)
 
 # ---------------------------------------------------------------------------- #
 # End

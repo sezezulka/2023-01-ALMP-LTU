@@ -1,17 +1,31 @@
 # ---------------------------------------------------------------------------- #
-# 00-Config and Utilities 
+# 00-config
 # ---------------------------------------------------------------------------- #
-
-# Requirements
-
+# 
+# First, specify the location of the working directory and execute this script.
+# It installs the required packages (except "devtools" and "causalDML"), and 
+# specifies the seed, the required path-variables and variable lists.
+#
+# Requirements: 
 # "R version 4.2.2 (2022-10-31 ucrt)"
-
+#
 # Libraries:
-# 01: tidyverse, grf
-# 02: devtools, causalDML, policytree
-# 03: causalDML
-# 04: tidyverse
-# 05: tidyverse, gt, Hmisc
+# 01: tidyverse 2.0.0, grf 2.3.1
+# 02: devtools 2.4.5, causalDML 0.1.0, policytree 1.2.2
+# 03: causalDML 0.1.0, fairml 0.8, glmnet 4.1-8
+# 04: tidyverse 2.0.0
+# 05: tidyverse 2.0.0 , gt 0.10.0, Hmisc 5.1-1
+# 06: tidyverse, 2.0.0, readxl 1.4.3, readr 2.1.4
+# 07: tidyverse, 2.0.0, readxl 1.4.3, readr 2.1.4
+#
+# ---------------------------------------------------------------------------- #
+# Author: Sebastian Zezulka
+# 2024-04-18
+#
+# ---------------------------------------------------------------------------- #
+# TODO set working directory 
+wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+setwd(wd_path)
 
 # ---------------------------------------------------------------------------- #
 # Set values
@@ -19,17 +33,29 @@
 
 seed = 12345
 
-package_list <- c("tidyverse", "grf", "devtools", "policytree", "gt", "Hmisc")
+package_list <- c("tidyverse", "grf", "devtools", "policytree", "fairml", "glmnet",
+                  "gt", "Hmisc", "readxl", "readr")
 
-raw_data_path <- c("data/swissubase_1203_1_0/1203_ALMP_Data_E_v1.0.0.csv")
+belgiumcolor="#1704E0"
+austriacolor="#E03D2B"
 
-pre_data_path <- c("data/1203_ALMP.csv")
+# ---------------------------------------------------------------------------- #
+# Path variables
+# ---------------------------------------------------------------------------- #
 
-effect_data_path <- c("data/1203_ALMP_effects.csv")
+data_path_raw <- c("data/swissubase_1203_1_0/1203_ALMP_Data_E_v1.0.0.csv")
 
-risk_data_path <- c("data/1203_ALMP_effects_risk_fairFemale.csv")
+data_path_pre <- c("data/1203_ALMP.csv")
 
-sim_data_path <- c("data/1203_ALM_effects_risk_fairFemale_sim.csv")
+data_path_effects <- c("data/1203_ALMP_effects.csv")
+
+data_path_risk <- c("data/1203_ALMP_effects_riskFemale001.csv")
+
+data_path_sim <- c("data/1203_ALM_simulation_results.csv")
+
+# ---------------------------------------------------------------------------- #
+# Variable lists
+# ---------------------------------------------------------------------------- #
 
 effects_var_list <- c("age","canton_moth_tongue","city_big","city_medium","city_no",
                       "cw_age","cw_cooperative","cw_educ_above_voc","cw_educ_tertiary",
@@ -86,7 +112,7 @@ f_install_packages <- function(package_list) {
 
 
 # ---------------------------------------------------------------------------- #
-# Packages
+# Load required packages
 # ---------------------------------------------------------------------------- #
 
 f_install_packages(package_list)

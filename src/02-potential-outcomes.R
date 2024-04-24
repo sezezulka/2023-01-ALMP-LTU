@@ -1,44 +1,73 @@
 # ---------------------------------------------------------------------------- #
-# 02-Estimate potential outcomes
+# 02-potential-outcomes
+# ---------------------------------------------------------------------------- #
+# 
+# This script estimates individualized average potential outcomes (IAPOs) for 
+# all specified labor market programs using double-robust machine learning for 
+# the "Swiss Active Labor Market Policy Dataset, Ref. 1203".
+# Use pre-processed data only. 
+# APOs and ATEs and their respective standard errors can be estimated from the
+# resulting IAPOs. 
+#
+# ---------------------------------------------------------------------------- #
+# Author: Sebastian Zezulka
+# 2024-04-24
+#
+# ---------------------------------------------------------------------------- #
+# This code is based on the publications by:
+# 1. Michael C. Knaus (2022). Double machine learning-based programme evaluation under unconfoundedness.The Econometrics Journal.
+# see especially: 
+# https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/code/Data_preparation_MCK2022.R
+# 
+# 2. John Körtner and Ruben L. Bach (2023). Inequality-Averse Outcome-Based Matching. 
+# 
+# Many thanks to John Körtner and Ruben Bach for sharing their code as well as 
+# for many helpful discussions to Michael Knaus.
+# All remaining errors are my own.
+# 
 # ---------------------------------------------------------------------------- #
 
+
+# execute "00-utils.R" first!
+
+# set seed
+set.seed(seed)
+
+# ---------------------------------------------------------------------------- #
+# Libraries
+library(tidyverse)
 library(devtools)
 library(causalDML)
 library(policytree)
 
 # ---------------------------------------------------------------------------- #
-# set working directory 
-wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
-setwd(wd_path)
-
-source("src/00-utils.R")
-set.seed(seed)
-
-db_pre <- read.csv(pre_data_path)
+# Data
+db_pre <- read.csv(data_path_pre)
 
 # ---------------------------------------------------------------------------- #
-# Preparations
+# Functions
 # ---------------------------------------------------------------------------- #
 
 f_potential_outcomes <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   
   #############################################################
   # 
-  # Estimation of IAPOs, IATEs from DR Scores.
+  # Estimates IAPOs and IATEs from DR scores.
   #
-  # df :              Dataset.
-  # treatments_list : List of treatments. 
+  # df :              Pre-processed data frame.
+  # treatments_list : List of treatments for which IAPOs/IATEs are estimated. 
   # var_list :        List of variable names for covariate matrix.
-  # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
-  # -x- bound_list -x- : List of (Boolean, upper, and lower limit).
+  # outcome_name :    Character. Name of outcome variable used, e.g. "y_exit12".
   # cv :              Number of cross-validations, default = 4.
+  #
+  # Returns data frame with nuisance parameters, and IATE and IAPO estimates.
   #
   #############################################################
   
-  # checks
+  # check
   if (!(is.character(outcome_name))) {stop("Error: Name of outcome variable must be character.")}
     
-  # create treatment
+  # create treatment variable
   w = df$treatment6
   w = factor(w, 
              treatments_list)
@@ -115,7 +144,8 @@ f_dr_scores <- function(w_mat, nui_prop, nui_outcomes, outcomes) {
   
   #############################################################
   #
-  # Estimates DR scores. Returns Gamma 
+  # Returns double-robust scores, gamma, alongside the
+  # inverse probability weights, ipw_mat, used in their construction.
   #
   # w_mat :         Matrix of binary treatment indicators (n x T+1)
   # nui_prop :      Propensity scores (n x T+1)
@@ -135,7 +165,7 @@ f_ipw <- function(w_mat, nui_prop) {
   
   #############################################################
   #
-  # Estimates IPWs, normalised by norm 1.
+  # Estimates normalised Inverse Probability Weights, ipw.
   #
   # w_mat :     matrix of binary treatment indicators (n x T+1)
   # nui_prop :  Propensity scores (n x T+1)
@@ -147,7 +177,7 @@ f_ipw <- function(w_mat, nui_prop) {
   for (i in 1:ncol(w_mat)) {
     
     ipw[,i] = w_mat[,i] / nui_prop[,i]
-    # TODO normalisation
+    # normalisation
     ipw[,i] = ipw[,i] / (sum(ipw[,i]) * nrow(w_mat))
   }
   
@@ -160,7 +190,8 @@ f_gamma <- function(w_mat, nui_outcomes, ipw_mat, outcomes) {
   
   #############################################################
   #
-  # Estimates Gamma matrix.
+  # Estimates double-robust scores, gamma, according to
+  # equation (3.1) in Knaus (2022).
   #
   # w_mat :         Matrix of binary treatment indicators (n x T+1)
   # nui_outcomes :  Pseudo outcomes per treatment (n x T+1)
@@ -185,15 +216,21 @@ f_smoothed_iapos <- function(w_mat, gamma, x, train_test_idx, bound_outcomes=TRU
   
   #############################################################
   # 
-  # Returns smoothed individualised average potential outcomes from Gamma.
-  # check: https://github.com/MCKnaus/causalDML/issues/4#issuecomment-1238095799
+  # Returns smoothed individualised average potential outcomes (theta),
+  # using the estimates of the double-robust scores, gamma, as pseudo-outcomes.
+  #
+  # Regression forest build on scores for training data, only estimates for
+  # the test set are used in the following analysis. 
+  #
+  # Note that Körtner and Bach (2023) use cross-validation to get IAPO estimates
+  # for all observations. 
+  #
+  # see: https://github.com/MCKnaus/causalDML/issues/4#issuecomment-1238095799
   #
   # w_mat :           Matrix of binary treatment indicators (n x T+1)
   # gamma :           Matrix of DR potential outcomes (n x T+1)
   # x :               Covariate matrix (n x d)
-  # -x- cfm :             Matrix of binary cross-fitting fold indicators (n x # cross-folds).
   # train_test_idx :  Vector for train-test split.
-  # -x- cv :              Number of cross-validations, default = 4.
   # bound_outcomes :  Boolean: True if results are to be bounded in range.
   # up :              Upper bound of range.
   # low :             Lower bound of range.
@@ -201,36 +238,23 @@ f_smoothed_iapos <- function(w_mat, gamma, x, train_test_idx, bound_outcomes=TRU
   #
   #############################################################
   
-  # cfm = prep_cf_mat(nrow(w_mat), cv, w_mat)
   theta = matrix(NA, nrow(w_mat), ncol(w_mat))
   
+  # loop over all treatment options
   for (i in 1:ncol(w_mat)) {
     
-    # train-test (theta)
+    # training set
     r.forest <- regression_forest(x[train_test_idx,], 
                                   gamma[train_test_idx,i], 
                                   tune.parameters = 'all', 
                                   seed=seed) 
+    # test set
     theta[!train_test_idx,i] <- predict(r.forest, x[!train_test_idx,])$predictions
-    
-    # with cv for whole dataset
-    # t = matrix(NA, nrow(cfm), ncol(cfm))
-    # 
-    # 
-    # for (c in 1:cv) {
-    #   oos = cfm[,c]
-    #   r.forest <- regression_forest(x[!oos,], 
-    #                                 gamma[!oos,i], 
-    #                                 tune.parameters = 'all', 
-    #                                 seed=seed) 
-    #   t[oos,c] <- predict(r.forest, x[oos,])$predictions
-    #   
-    # }
-    # theta[,i] <- rowSums(t, na.rm = TRUE)
     
     cat('Variable:', i, 'of', ncol(w_mat), '.\n')
   }
   
+  # bound outcomes in interval [up, down]
   if (bound_outcomes==TRUE) {
     theta <- f_bound_outcomes(theta, up, low)
   }
@@ -243,7 +267,7 @@ f_bound_outcomes <- function(iapo_mat, up=1, low=0) {
   
   #############################################################
   # 
-  # Bounds results in range [0, 1]
+  # Bounds results in interval [low, up].
   # 
   # iapo_mat :  Matrix of estimated/smoothed IAPOs.
   # up :        Upper bound, default = 1.
@@ -271,9 +295,11 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   
   #############################################################
   # 
-  # Estimation of APOs and ATEs from CausalDML package.
+  # Not required for the analysis. Serves only to compare average 
+  # results with implementation in the CausalDML package.
+  # Returns cDML object. 
   #
-  # df :              Dataset.
+  # df :              Data frame.
   # treatments_list : List of treatments. 
   # var_list :        List of variable names for covariate matrix.
   # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
@@ -298,7 +324,6 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   forest = create_method("forest_grf",
                          args=list(tune.parameters = "all",
                                    seed=seed))
-  mean = create_method("mean")
   
   # estimation
   cDML = DML_aipw(y,
@@ -312,87 +337,32 @@ f_cDML <- function(df, treatments_list, var_list, outcome_name, cv=4) {
   return(cDML)
 }
 
-f_ndr_learner <- function(df, treatments_list, var_list, outcome_name,cv=4) {
+f_se_t_p <- function(df, treatments_list) {
   
   #############################################################
+  # 
+  # Estimates and returns standard errors, confidence intervals, 
+  # t-statistics, and p-values for average treatment effects.
   #
-  # (N)DR-learner from causalDML package. 
-  #
-  # df :              Dataset.
-  # treatments_list : List of treatments. 
-  # var_list :        List of variable names for covariate matrix.
-  # outcome_name :    Name of outcome variable, e.g. y_exit12. String.
-  # cv :              Number of cross-validations, default = 4.
+  # df :              Data frame.
+  # treatments_list : List of treatments for which IAPOs/IATEs are estimated. 
   #
   #############################################################
   
-  # create treatment
-  w = df$treatment6
-  w = factor(w, 
-             treatments_list)
-  
-  # preparation
-  x <- data.matrix(df[,var_list])
-  y <- df[,outcome_name]
-  
-  # create methods
-  forest = create_method("forest_grf",
-                         args=list(tune.parameters = "all",
-                                   seed=seed))
-  mean = create_method("mean")
-  
-  # (n)dr learner
-  ndr = ndr_learner(y,
-                    w,
-                    x,
-                    ml_w = list(forest),
-                    ml_y = list(forest),
-                    ml_tau = list(forest),
-                    compare_all = FALSE,
-                    nfolds = cv,
-                    quiet=FALSE,
-  )
-  
-  return(ndr)
-}
-
-# ---------------------------------------------------------------------------- #
-# Potential Outcomes
-# ---------------------------------------------------------------------------- #
-
-outcome <- 'y_exit12'
-no_cv <- 4
-db_effects <- f_potential_outcomes(db_pre, treatments_list, effects_var_list, outcome_name=outcome, cv=no_cv)
-
-# analyse
-db %>% select(starts_with('iate_')) %>% colMeans()
-db %>% select(starts_with('iapo_')) %>% summary(., mean())
-
-  
-# ---------------------------------------------------------------------------- #
-# save
-write.csv(db, file="data/1203_ALMP_effects.csv")
-# ---------------------------------------------------------------------------- #
-
-
-# ---------------------------------------------------------------------------- #
-# Standard Errors
-# ---------------------------------------------------------------------------- #
-
-f_se_t_p <- function(df_effects, treatments_list) {
-  
-  # create treatment list for simulation data
-  w <- df_effects[df_effects$training==0, "treatment6"]
+  # create treatment list for test (=simulation) data
+  w <- df[df$training==0, "treatment6"]
   w = factor(w, treatments_list)
   wm = prep_w_mat(w)
   
-  df_iates <- df_effects %>%
+  # select IATEs of test data
+  df_iates <- df %>%
     filter(training==0) %>%
     select(starts_with('iate_')) 
   
+  # prepare results matrix
   results_iate <- matrix(NA, ncol(wm)-1, 6)
   colnames(results_iate) <- c("ATE", "SE", "CI_low", "CI_up", "t", "p")
-  rownames(results_iate) = rep("Platzhalter",nrow(results_iate))
+  rownames(results_iate) = rep("Platzhalter", nrow(results_iate))
   
   for (i in 1:(ncol(wm)-1)) {
     
@@ -417,19 +387,40 @@ f_se_t_p <- function(df_effects, treatments_list) {
   return(results_iate)
 }
 
-iate_results_test <- f_se_t_p(db_sim, treatments_list)
+# ---------------------------------------------------------------------------- #
+# Estimate Potential Outcomes and ATE Standard Errors
+# ---------------------------------------------------------------------------- #
+
+outcome <- 'y_exit12'
+no_cv <- 4
+db_effects <- f_potential_outcomes(db_pre, 
+                                   treatments_list, 
+                                   effects_var_list, 
+                                   outcome_name=outcome, 
+                                   cv=no_cv)
+
+# quick analysis
+db_effects %>% filter(training==0) %>% select(starts_with('iate_')) %>% summary(., mean())
+db_effects %>% filter(training==0) %>% select(starts_with('iapo_')) %>% summary(., mean())
+
+
+# Standard Errors for ATEs
+iate_results_testset <- f_se_t_p(db_effects, treatments_list)
+
+# ---------------------------------------------------------------------------- #
+# save
+# ---------------------------------------------------------------------------- #
+write.csv(db_effects, file=data_path_effects)
 
 
 # ---------------------------------------------------------------------------- #
-# compare results
+# compare average results with vanilla causalDML implementation
 # ---------------------------------------------------------------------------- #
 
-cDML <- f_cDML(db_pre, treatments_list, effects_var_list, outcome)
+# cDML <- f_cDML(db_pre, treatments_list, effects_var_list, outcome)
  
-summary(cDML$ATE)
- 
-# ndr <- f_ndr_learner(db, treatments_list, effects_var_list, outcome)
-# # TODO Fehler: honest fraction too close to 1 or 0
+# summary(cDML$ATE)
+
 
 # ---------------------------------------------------------------------------- #
 # End

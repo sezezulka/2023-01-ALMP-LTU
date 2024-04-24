@@ -1,120 +1,216 @@
-# ---------------------------------------------------------------------------- 
-# 05 Figures Paper
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
+# 06-figures-paper
+# ---------------------------------------------------------------------------- #
+# 
+# This script produces all figures for the main body of Zezulka and Genin (2024).
+#
+# ---------------------------------------------------------------------------- #
+# Authors: Sebastian Zezulka and Konstantin Genin
+# 2024-04-18
+#
+# ---------------------------------------------------------------------------- #
 
+# execute "00-utils.R" first!
+
+set.seed(seed)
+
+# ---------------------------------------------------------------------------- #
+# Libraries
 library(tidyverse)
+library(readxl)
+library(readr)
 
-setwd("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+# ---------------------------------------------------------------------------- #
+# Data
+db_sim <- read.csv(data_path_sim)
+db_ltu_swiss <- readxl::read_xlsx("data/estat-une-ltu.xlsx")
 
-file = "data/1203_ALMP_effects_risk_fairFemale_sim.csv"
-db_sim = read.csv(file)
+# TODO
+db_sim <- read.csv("data/1203_ALMP_effects_risk_fairFemale_sim.csv")
 
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 # Functions
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 
-f_reshape_long <- function(df) {
+f_sim_viz_prep <- function(df, sens_group) {
   
   #############################################################
   #
+  # Returns long format of simulation results of IAPOs for plotting.
   #
+  # df :          Data frame with simulation results.
+  # sens_group :  Sensitive attribute of interest: {gender, citizenship}.
   #
   #############################################################
   
-  long_df <- df %>%
+  # select simulation results
+  selected_vars <- grep("iapo_policy_", names(df), value = TRUE)
+  selected_vars <- selected_vars[!grepl("_if_", selected_vars)]
+  
+  # average LTU results by policies
+  df_policies <- df %>%
+    summarise(across(all_of(selected_vars), mean))
+  
+  # average LTU results by gender and policies
+  df_gender <- df %>%
+    group_by(female) %>%
+    summarise(across(all_of(selected_vars), mean))
+  
+  # average LTU results by citzenship and policies
+  df_citizen <- df %>%
+    group_by(swiss) %>%
+    summarise(across(all_of(selected_vars), mean))
+  
+  # make long format
+  df_policies <- f_reshape_long(df_policies)
+  
+  if (sens_group=="gender") { 
+    # long format by gender
+    df_gender <- f_reshape_long(df_gender, by_gender=TRUE, by_citizen=FALSE)
+    
+    # prepare vizualisation data
+    df_viz_long <- filter(df_gender, female==1)
+    
+    # add male average results
+    m_long <- filter(df_gender, female==0)
+    df_viz_long$male_mean <- m_long$male_mean
+    
+    # add overall policy average results
+    df_viz_long$mean_value <- df_policies$mean_value
+    
+  } else if (sens_group=="citizenship") {
+    # long format by citizenship
+    df_citizen <- f_reshape_long(df_citizen, by_gender=FALSE, by_citizen=TRUE)
+    
+    # prepare vizualisation data
+    
+    df_viz_long <- filter(df_citizen, swiss==1)
+    
+    # add non-citizen average results
+    noncit_long <- filter(df_citizen, swiss==0)
+    df_viz_long$nonswiss_mean <- noncit_long$nonswiss_mean
+    
+    # add overall policy average results
+    df_viz_long$mean_value <- df_policies$mean_value
+    
+  } else {
+    stop("Error: Sensitive attribute must be either 'gender' or 'citizenship'.")
+  }
+  
+  return(df_viz_long)
+}
+
+
+f_reshape_long <- function(df, by_gender=FALSE, by_citizen=FALSE) {
+  
+  #############################################################
+  #
+  # Returns long format of simulation data.
+  #
+  # df :          Data frame with simulation results.
+  # by_gender :   Boolean: set TRUE  if data is grouped by gender.
+  # by_citizen :  Boolean: set TRUE if data is grouped by citizen.
+  #
+  #############################################################
+  
+  df_long <- df %>%
     tidyr::pivot_longer(cols = starts_with("iapo_policy_"),
                         names_to = "variable",
                         values_to = "mean_value") %>%
     mutate(capacity = readr::parse_number(variable))
   
-  long_df[ , ncol(long_df) + 1] <- 0                  # Create column for level of inequality aversion
-  colnames(long_df)[ncol(long_df)] <-"ineq_aversion"  
-  long_df[grep("lo_ineq_averse",long_df$variable),]$ineq_aversion<-1
-  long_df[grep("med_ineq_averse",long_df$variable),]$ineq_aversion<-2
-  long_df[grep("hi_ineq_averse",long_df$variable),]$ineq_aversion<-3
+  # Create policy column (Austrian/Belgian)
+  df_long[ , ncol(df_long) + 1] <- "Belgian"                  
+  colnames(df_long)[ncol(df_long)] <-"policy"  
+  df_long[grep("Austrian",df_long$variable),]$policy<-"Austrian"
   
-  long_df[ , ncol(long_df) + 1] <- ""                  # Create column for Austrian/Belgian
-  colnames(long_df)[ncol(long_df)] <-"policy"  
-  long_df[grep("Belgian",long_df$variable),]$policy<-"Belgian"
-  long_df[grep("Austrian",long_df$variable),]$policy<-"Austrian"
+  # Create assignment column (optimal/random assignment strategy)
+  df_long[ , ncol(df_long) + 1] <- "upper"                  
+  colnames(df_long)[ncol(df_long)] <-"assignment" 
+  df_long[grep("lower",df_long$variable),]$assignment<-"lower"
   
-  long_df[ , ncol(long_df) + 1] <- "upper"                  # Create column for upper/lower/empirical assignment strategy
-  colnames(long_df)[ncol(long_df)] <-"assignment"  # Rename column name
-  # long_df[grep("upper",long_df$variable),]$assignment<-"upper"
-  long_df[grep("lower",long_df$variable),]$assignment<-"lower"
+  # Create fairness column (fairness constraint)
+  df_long[ , ncol(df_long) + 1] <- "0_log"                  
+  colnames(df_long)[ncol(df_long)] <-"fairness" 
+  df_long[grep("_sp_",df_long$variable),]$fairness<-"1_sp"
+  df_long[grep("_eo_",df_long$variable),]$fairness<-"2_eo"
+  # df_long[grep("_if_",df_long$variable),]$fairness<-"3_if"
   
-  long_df[ , ncol(long_df) + 1] <- "0_log"                  # Create column for upper/lower/empirical assignment strategy
-  colnames(long_df)[ncol(long_df)] <-"fairness"  # Rename column name
-  long_df[grep("_sp_",long_df$variable),]$fairness<-"1_sp"
-  long_df[grep("_eo_",long_df$variable),]$fairness<-"2_eo"
-  # long_df[grep("_if_",long_df$variable),]$fairness<-"3_if"
+  # Create fairness_alpha column (colour transparency for each fairness constraint)
+  df_long[ , ncol(df_long) + 1] <- 1                  
+  colnames(df_long)[ncol(df_long)] <-"fairness_alpha" 
+  df_long[grep("_sp_",df_long$variable),]$fairness_alpha<-.66
+  df_long[grep("_eo_",df_long$variable),]$fairness_alpha<-.33
+  # df_long[grep("_if_",df_long$variable),]$fairness_alpha<-.25
   
-  long_df[ , ncol(long_df) + 1] <- 1                  # Create column for upper/lower/empirical assignment strategy
-  colnames(long_df)[ncol(long_df)] <-"fairness_alpha"  # Rename column name
-  long_df[grep("_sp_",long_df$variable),]$fairness_alpha<-.66
-  long_df[grep("_eo_",long_df$variable),]$fairness_alpha<-.33
-  # long_df[grep("_if_",long_df$variable),]$fairness_alpha<-.25
+  if (by_gender==TRUE) {
+    # Create column for female average result
+    df_long[ , ncol(df_long) + 1] <- 0                
+    colnames(df_long)[ncol(df_long)] <-"female_mean"
+    df_long$female_mean = df_long$female * df_long$mean_value
+    
+    # Create column for male average result
+    df_long[ , ncol(df_long) + 1] <- 0              
+    colnames(df_long)[ncol(df_long)] <-"male_mean"
+    df_long$male_mean = (1-df_long$female) * df_long$mean_value
+  }
   
-  return(long_df) 
-}
+  if (by_citizen==TRUE) {
+    # Create column for Swiss citizen average result
+    df_long[ , ncol(df_long) + 1] <- 0                  
+    colnames(df_long)[ncol(df_long)] <-"swiss_mean"     
+    df_long$swiss_mean = df_long$swiss * df_long$mean_value
+    
+    # Create column for non-Swiss citizen average result
+    df_long[ , ncol(df_long) + 1] <- 0                  
+    colnames(df_long)[ncol(df_long)] <-"nonswiss_mean"
+    df_long$nonswiss_mean = (1-df_long$swiss) * df_long$mean_value
+  }
+  
+  return(df_long)
+  }
 
-# ---------------------------------------------------------------------------- 
+
+# ---------------------------------------------------------------------------- #
 # Prepare Data
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 
-selected_vars <- grep("iapo_policy_", names(db_sim), value = TRUE)
-# drop "individual fairness"
-selected_vars <- selected_vars[!grepl("_if_", selected_vars)]
+# Swiss LTU Data
+db_ltu_swiss$gap <- db_ltu_swiss[,"women"] - db_ltu_swiss[,"men"]
+db_ltu_swiss[,2:4] <- db_ltu_swiss[,2:4] * 100
+db_ltu_swiss$group <- 1       # required for ggplot groupings
 
-# prepare data, by gender
-db_gender <- db_sim %>%
-  group_by(female) %>%
-  summarise(across(all_of(selected_vars), mean))
 
-db_policies <- db_sim %>%
-  summarise(across(all_of(selected_vars), mean))
+# ---------------------------------------------------------------------------- #
+# Simulation results 
+db_sim_viz_gender <- f_sim_viz_prep(db_sim, "gender")
 
-# reshape
-gender_long <- f_reshape_long(db_gender)
-long <- f_reshape_long(db_policies)
+# figure-specific selection
+f_long_belgian_upper <- db_sim_viz_gender %>% 
+  filter(policy=="Belgian" & assignment=="upper")
+f_long_austrian_upper <- db_sim_viz_gender %>% 
+  filter(policy=="Austrian" & assignment=="upper")
+f_long_austrian_lower <- db_sim_viz_gender %>% 
+  filter(policy=="Austrian" & assignment=="lower")
+f_long_belgian_lower <- db_sim_viz_gender %>% 
+  filter(policy=="Belgian" & assignment=="lower")
 
-gender_long[ , ncol(gender_long) + 1] <- 0                # Create column for upper/lower/empirical assignment strategy
-colnames(gender_long)[ncol(gender_long)] <-"female_mean"  # Rename column name
-gender_long$female_mean = gender_long$female * gender_long$mean_value
+f_long_nofair_upper <- db_sim_viz_gender %>% 
+  filter(fairness=="0_log" & assignment=="upper")
+f_long_nofair_lower <- db_sim_viz_gender %>% 
+  filter(fairness=="0_log" & assignment=="lower")
 
-gender_long[ , ncol(gender_long) + 1] <- 0              # Create column for upper/lower/empirical assignment strategy
-colnames(gender_long)[ncol(gender_long)] <-"male_mean"  # Rename column name
-gender_long$male_mean = (1-gender_long$female) * gender_long$mean_value
-
-f_long <- filter(gender_long, female==1)
-m_long <- filter(gender_long, female==0)
-
-f_long$male_mean <- m_long$male_mean
-f_long$mean_value <- long$mean_value
-
-f_long_belgian_upper <- filter(f_long,policy=="Belgian" & assignment=="upper")
-f_long_austrian_upper <- filter(f_long,policy=="Austrian" & assignment=="upper")
-f_long_austrian_lower <- filter(f_long,policy=="Austrian" & assignment=="lower")
-f_long_belgian_lower <- filter(f_long,policy=="Belgian" & assignment=="lower")
-
-f_long_nofair_upper <- filter(f_long,fairness=="0_log" & assignment=="upper")
-f_long_nofair_lower <- filter(f_long,fairness=="0_log" & assignment=="lower")
-
+# set visualization values
 pre_ltu_female <- mean(db_sim[db_sim$female==1, "y_exit12"])
 pre_ltu_male <- mean(db_sim[db_sim$female==0, "y_exit12"])
 
-belgiumcolor="#1704E0"
-austriacolor="#E03D2B"
 
+# ---------------------------------------------------------------------------- #
+# Fig 2: Swiss LTU Rates
+# ---------------------------------------------------------------------------- #
 
-# ---------------------------------------------------------------------------- 
-# Fig 2: Swiss LTU
-# ---------------------------------------------------------------------------- 
-db_ltu_swiss <- readxl::read_xlsx("data/estat-une-ltu.xlsx")
-db_ltu_swiss$gap <- db_ltu_swiss[,"women"] - db_ltu_swiss[,"men"]
-db_ltu_swiss[,2:4] <- db_ltu_swiss[,2:4] * 100
-
-ggplot(db_ltu_swiss, aes(x = year)) +
+# LTU time series
+fig2_swiss_ltu_rate <- ggplot(db_ltu_swiss, aes(x = year)) +
   geom_line(aes(y = women, colour = as.factor(group)), size = 1.5) +
   geom_point(aes(y = women, colour = as.factor(group), shape = as.factor(group)), size = 6) +
   geom_line(aes(y = men, colour = as.factor(1-group)), size = 1.5) +
@@ -123,7 +219,7 @@ ggplot(db_ltu_swiss, aes(x = year)) +
   geom_point(aes(y = gap, colour = as.factor(group*2), shape = as.factor(group*2)), size = 6) +
   geom_hline(yintercept = 0, size = 0.5) +
   scale_color_manual(name = "Gender:",
-                     values = c("purple", "#61D04F", "#d95f02"), #  #fdc086
+                     values = c("purple", "#61D04F", "#d95f02"),
                      labels = c("Female", "Male", "Gap")) +
   scale_shape_manual(name = "Gender:",
                       values = c(17, 16, 18),
@@ -146,36 +242,25 @@ ggplot(db_ltu_swiss, aes(x = year)) +
         axis.title = element_text(size = 16),
         axis.title.x = element_blank())
 
+ggsave("output/Fig2-Swiss-LTU-Rates.pdf", fig2_swiss_ltu_rate, width = 16, height = 8)
 
 
+# ---------------------------------------------------------------------------- #
+# Fig 3 (a): Individualized Average Treatment Effects 
+# ---------------------------------------------------------------------------- #
 
-# ---------------------------------------------------------------------------- 
-# Fig 3: Violin Plots
-# ----------------------------------------------------------------------------
-# display ATEs
-db_sim %>% 
-  select(starts_with('iate_')) %>% 
-  colMeans()
-
-# db_sim %>% 
-#   filter(training==0) %>%
-#   select(starts_with('iapo_')) %>% 
-#   colMeans()
-
-# plot IATEs
-db_iates <- db_sim %>%
-  select(starts_with('iate_')) 
-
+# prepare data
 treatment_names <-  c("Vocational", "Computer", "Language", "Job Search", "Employment", "Personality")
 
-data_long <- gather(db_iates, key = "IATE", value = "Value")
-data_long <- data_long %>%
+db_iates <- db_sim %>% select(starts_with('iate_')) 
+db_iates_long <- gather(db_iates, key = "IATE", value = "Value")
+db_iates_long <- db_iates_long %>%
   mutate(IATE = sub("iate_", "", IATE)) %>%
   mutate(IATE = sub("_", " ", IATE))
+db_iates_long$IATE <- factor(db_iates_long$IATE, treatments_list[-1])
 
-data_long$IATE <- factor(data_long$IATE, treatments_list[-1])
-
-ggplot(data_long, aes(x=IATE, y=Value)) +
+# violin plots of IATEs
+fig3a_iates <- ggplot(db_iates_long, aes(x=IATE, y=Value)) +
   geom_violin(fill="grey") +
   stat_summary(fun.y = "mean", 
                geom="point", colour = "red", shape = 3, size=4) +
@@ -188,9 +273,12 @@ ggplot(data_long, aes(x=IATE, y=Value)) +
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1)) 
 
-# ---------------------------------------------------------------------------- 
+ggsave("output/Fig3a-IATEs.pdf", fig3a_iates, width = 10, height = 8)
+
+
+# ---------------------------------------------------------------------------- #
 # Fig 4: Gender Gap
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 
 # Belgian Upper
 ggplot(f_long_belgian_upper, aes(x = capacity, 
@@ -339,9 +427,9 @@ ggplot(f_long_austrian_lower,
         axis.title = element_text(size = 16)) 
 
 
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 # Fig 5: Overall Plots
-# ---------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------- #
 
 # Upper
 ggplot(f_long_nofair_upper, 
@@ -434,3 +522,7 @@ ggplot(f_long_nofair_lower,
         legend.direction = "horizontal",
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
+
+# ---------------------------------------------------------------------------- #
+# End
+# ---------------------------------------------------------------------------- #
