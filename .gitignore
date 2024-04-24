@@ -2,8 +2,10 @@
 /admin/
 /data/
 /notes/
-/output/
+/paper/
 /src/automating-inequality-main
+/src/archive-R
+/src/archive-Python
 
 # History files
 .Rhistory
