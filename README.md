@@ -9,21 +9,21 @@ To replicate the results, get access to the scientific usefiles from SWISSbase.
 
 Always start by executing ""00-config.R"". First, specify the location of the working directory. It installs the required packages if not already available (except "devtools" and "causalDML"), specifies the seed, the required path-variables, and variable lists. 
 
-"01-preprocessing.R" prepares the raw data for the analysis. See Zezulka and Gening (2024) for details.
+- "01-preprocessing.R" prepares the raw data for the analysis. See Zezulka and Gening (2024) for details.
 
-"02-potential-outcomes.R" uses the preprocessed data to estimate individualized average potential outcomes for the test set.
+- "02-potential-outcomes.R" uses the preprocessed data to estimate individualized average potential outcomes for the test set.
 
-"03-risk-scores.R" can be used to estimate both fairness constraint and unconstrained risk scores of long-term unemployment. It implements a logistic ridge regression and implements "statistical parity" and "equal opportunity" as fairness constraints on the risk scores. 
+- "03-risk-scores.R" can be used to estimate both fairness constraint and unconstrained risk scores of long-term unemployment. It implements a logistic ridge regression and implements "statistical parity" and "equal opportunity" as fairness constraints on the risk scores. 
 
-"04-ai-policies.R" combines the estimated individualized potential outcomes and risk scores to simulate the effect of various **Algorithmically Informed Policies** on the rate of long-term unemployment and the respective gender gap.
+- "04-ai-policies.R" combines the estimated individualized potential outcomes and risk scores to simulate the effect of various **Algorithmically Informed Policies** on the rate of long-term unemployment and the respective gender gap.
 
-"05-descr-stats.R" outputs all relevant descriptive statistics and tables.
+- "05-descr-stats.R" outputs all relevant descriptive statistics and tables.
 
-"05-descr-stats-risk-scores" is a Jupyter Notebook that provides the (fairness) evaluation of all three risk scores. See Appendix B.5, Table 4.
+- "05-descr-stats-risk-scores" is a Jupyter Notebook that provides the (fairness) evaluation of all three risk scores. See Appendix B.5, Table 4.
 
-"06-figures-paper.R" can be used to reproduce all figures presented in the paper.
+- "06-figures-paper.R" can be used to reproduce all figures presented in the paper.
 
-"07-figures-supp.R"
+- "07-figures-supp.R" can be used to reproduce all figures from the Appendix.
 
 ### Requirements: 
 - R version 4.2.2 (2022-10-31 ucrt)
