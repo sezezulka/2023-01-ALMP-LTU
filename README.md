@@ -27,4 +27,4 @@ see especially: https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/
 
 2. John Körtner and Ruben L. Bach (2023). Inequality-Averse Outcome-Based Matching. 
 
-Many thanks to John Körtner and Ruben Bach for sharing their code as well as for many helpful discussions to Michael Knaus. All remaining errors are my own.
+Many thanks to John Körtner and Ruben Bach for sharing their code and for many helpful discussions to Michael Knaus. All remaining errors are my own.
