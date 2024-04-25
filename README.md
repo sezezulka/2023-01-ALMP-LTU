@@ -5,6 +5,9 @@
 ## Setup
 
 ## Data
+The data is available as scientific use file on SWISSbase.
+
+Michael Lechner, Michael Knaus, Martin Huber, Markus Frölich, Stefanie Behncke, Giovanni Mellace, Anthony Strittmatter (2020). Swiss Active Labor Market Policy Evaluation [Dataset]. Distributed by FORS, Lausanne. https://doi.org/10.23662/FORS-DS-1203-1.
 
 ## Contact
 [Sebastian Zezulka](https://ethics.epistemology.ai/people#h.ybght6vasbh4)
