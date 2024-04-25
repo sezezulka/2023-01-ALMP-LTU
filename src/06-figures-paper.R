@@ -26,7 +26,7 @@ db_sim <- read.csv(data_path_sim)
 db_ltu_swiss <- readxl::read_xlsx("data/estat-une-ltu.xlsx")
 
 # TODO
-db_sim <- read.csv("data/1203_ALMP_effects_risk_fairFemale_sim.csv")
+db_sim <- read.csv("data/ARCHIVE/1203_ALMP_effects_risk_fairFemale_sim.csv")
 
 # ---------------------------------------------------------------------------- #
 # Functions
@@ -180,6 +180,16 @@ db_ltu_swiss$gap <- db_ltu_swiss[,"women"] - db_ltu_swiss[,"men"]
 db_ltu_swiss[,2:4] <- db_ltu_swiss[,2:4] * 100
 db_ltu_swiss$group <- 1       # required for ggplot groupings
 
+# ---------------------------------------------------------------------------- #
+# IATEs
+treatment_names <-  c("Vocational", "Computer", "Language", "Job Search", "Employment", "Personality")
+
+db_iates <- db_sim %>% select(starts_with('iate_')) %>% 
+  gather(key = "IATE", value = "Value") %>% 
+  mutate(IATE = sub("iate_", "", IATE)) %>%
+  mutate(IATE = sub("_", " ", IATE)) 
+
+db_iates$IATE <- factor(db_iates$IATE, treatments_list[-1])
 
 # ---------------------------------------------------------------------------- #
 # Simulation results 
@@ -222,7 +232,7 @@ fig2_swiss_ltu_rate <- ggplot(db_ltu_swiss, aes(x = year)) +
                      values = c("purple", "#61D04F", "#d95f02"),
                      labels = c("Female", "Male", "Gap")) +
   scale_shape_manual(name = "Gender:",
-                      values = c(17, 16, 18),
+                      values = c(shape_female, shape_male, 18),
                       labels = c("Female", "Male", "Gap")) +
   scale_x_continuous(limits = c(1990, 2022), 
                      breaks = c(1990, 1995, 2000, 2005, 2010, 2015, 2020),
@@ -242,28 +252,18 @@ fig2_swiss_ltu_rate <- ggplot(db_ltu_swiss, aes(x = year)) +
         axis.title = element_text(size = 16),
         axis.title.x = element_blank())
 
-ggsave("output/Fig2-Swiss-LTU-Rates.pdf", fig2_swiss_ltu_rate, width = 16, height = 8)
+ggsave("output/Fig2-Swiss-LTU-Rates.pdf", fig2_swiss_ltu_rate, width = 10, height = 5)
 
 
 # ---------------------------------------------------------------------------- #
 # Fig 3 (a): Individualized Average Treatment Effects 
 # ---------------------------------------------------------------------------- #
 
-# prepare data
-treatment_names <-  c("Vocational", "Computer", "Language", "Job Search", "Employment", "Personality")
-
-db_iates <- db_sim %>% select(starts_with('iate_')) 
-db_iates_long <- gather(db_iates, key = "IATE", value = "Value")
-db_iates_long <- db_iates_long %>%
-  mutate(IATE = sub("iate_", "", IATE)) %>%
-  mutate(IATE = sub("_", " ", IATE))
-db_iates_long$IATE <- factor(db_iates_long$IATE, treatments_list[-1])
-
 # violin plots of IATEs
-fig3a_iates <- ggplot(db_iates_long, aes(x=IATE, y=Value)) +
-  geom_violin(fill="grey") +
+fig3a_iates <- ggplot(db_iates, aes(x=IATE, y=Value)) +
+  geom_violin(fill="grey", alpha=0.7) +
   stat_summary(fun.y = "mean", 
-               geom="point", colour = "red", shape = 3, size=4) +
+               geom="point", colour = "black", shape = 3, size=5) +
   geom_hline(yintercept = 0) + 
   labs(y = "IATEs") +
   scale_x_discrete(labels = treatment_names) +  
@@ -273,15 +273,15 @@ fig3a_iates <- ggplot(db_iates_long, aes(x=IATE, y=Value)) +
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1)) 
 
-ggsave("output/Fig3a-IATEs.pdf", fig3a_iates, width = 10, height = 8)
+ggsave("output/Fig3a-IATEs.pdf", fig3a_iates, width = 7, height = 5)
 
 
 # ---------------------------------------------------------------------------- #
 # Fig 4: Gender Gap
 # ---------------------------------------------------------------------------- #
 
-# Belgian Upper
-ggplot(f_long_belgian_upper, aes(x = capacity, 
+# (a) Belgian Upper
+fig4a_belgian_optimal <- ggplot(f_long_belgian_upper, aes(x = capacity, 
                                  y = mean_value, 
                                  ymin = male_mean, 
                                  ymax = female_mean, 
@@ -290,10 +290,10 @@ ggplot(f_long_belgian_upper, aes(x = capacity,
   geom_ribbon() +
   geom_line(aes(y = female_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha = 0.5) +
   geom_line(aes(y = male_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha=0.5) +
-  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = 17, alpha = 1) +
-  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = 16, alpha = 1) +
-  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17) +
-  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16) +
+  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = shape_female, alpha = 1) +
+  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = shape_male, alpha = 1) +
+  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = shape_female) +
+  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = shape_male) +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   geom_text(aes(x = 0.9, y = 0.425, label = "ex-ante gender gap"),
@@ -315,8 +315,11 @@ ggplot(f_long_belgian_upper, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Austrian Upper
-ggplot(f_long_austrian_upper, aes(x = capacity, 
+ggsave("output/Fig4a-Belgian-optimal.pdf", fig4a_belgian_optimal, width = 7, height = 6)
+
+
+# (c) Austrian Upper
+fig4c_austrian_optimal <- ggplot(f_long_austrian_upper, aes(x = capacity, 
                                   y = mean_value, 
                                   ymin = male_mean, 
                                   ymax = female_mean, 
@@ -325,10 +328,10 @@ ggplot(f_long_austrian_upper, aes(x = capacity,
   geom_ribbon() +
   geom_line(aes(y = female_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha = 0.5) +
   geom_line(aes(y = male_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha=0.5) +
-  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = 17, alpha = 1) +
-  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = 16, alpha = 1) +
-  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17) +
-  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16) +
+  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = shape_female, alpha = 1) +
+  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = shape_male, alpha = 1) +
+  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = shape_female) +
+  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = shape_male) +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   geom_text(aes(x = 2.8, y = 0.41, label = "ex-post gender gap"),
@@ -350,8 +353,11 @@ ggplot(f_long_austrian_upper, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Belgian Lower
-ggplot(f_long_belgian_lower, 
+ggsave("output/Fig4c-Austrian-optimal.pdf", fig4c_austrian_optimal, width = 7, height = 6)
+
+
+# (b) Belgian Lower
+fig4b_belgian_random <- ggplot(f_long_belgian_lower, 
                                  aes(x = capacity, 
                                      y = mean_value, 
                                      ymin = male_mean, 
@@ -361,10 +367,10 @@ ggplot(f_long_belgian_lower,
   geom_ribbon() +
   geom_line(aes(y = female_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha = 0.5) +
   geom_line(aes(y = male_mean, linetype = as.factor(fairness)), colour = 'black', size = 1, alpha=0.5) +
-  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = 17, alpha = 1) +
-  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = 16, alpha = 1) +
-  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17) +
-  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16) +
+  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = shape_female, alpha = 1) +
+  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = shape_male, alpha = 1) +
+  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = shape_female) +
+  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = shape_male) +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   scale_alpha_manual(values = c("0_log" = 1, "1_sp" = 0.66, "2_eo" = .33),
@@ -380,9 +386,11 @@ ggplot(f_long_belgian_lower,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig4b-Belgian-random.pdf", fig4b_belgian_random, width = 7, height = 6)
+
 
 # Austrian Lower
-ggplot(f_long_austrian_lower, 
+fig4d_austrian_random <- ggplot(f_long_austrian_lower, 
                                   aes(x = capacity, 
                                       y = mean_value, 
                                       ymin = male_mean, 
@@ -396,14 +404,14 @@ ggplot(f_long_austrian_lower,
              position = position_dodge(width = 0.2), color = 'black', size = 4, alpha = 1) +
   geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
              position = position_dodge(width = 0.2), color = 'black', size = 4, alpha = 1) +
-  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17) +
-  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16) +
+  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = shape_female) +
+  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = shape_male) +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   scale_alpha_manual(values = c("0_log" = 1, "1_sp" = 0.66, "2_eo" = .33),
                      labels = c("0_log" = "Logistic Regression", "1_sp" = "Stat. Parity", "2_eo" = "Equal Opp.")) +
   scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
-  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+  scale_shape_manual(values = c("0" = shape_male, "1" = shape_female), name = "Gender:",
                      labels = c("0" = "Male", "1" = "Female")) +
   scale_linetype_manual(values = c('0_log' = 'solid', '1_sp' = 'longdash', '2_eo' = 'dotdash'),
                         labels = c("0_log" = "None", "1_sp" = "Stat. Par.", "2_eo" = "Equal Opp."))  +
@@ -412,8 +420,8 @@ ggplot(f_long_austrian_lower,
        y = "LTU Rate",
        linetype = "Fair:") +
   theme_classic() + 
-  guides(fill = FALSE,
-         alpha = FALSE) +
+  guides(fill = "none",
+         alpha = "none") +
   theme(legend.position = c(0.02, 0.05), 
         legend.justification = c("left", "bottom"), 
         legend.box.just = "left",
@@ -426,13 +434,15 @@ ggplot(f_long_austrian_lower,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
 
+ggsave("output/Fig4d-Austrian-random.pdf", fig4d_austrian_random, width = 7, height = 6)
+
 
 # ---------------------------------------------------------------------------- #
 # Fig 5: Overall Plots
 # ---------------------------------------------------------------------------- #
 
-# Upper
-ggplot(f_long_nofair_upper, 
+# (a) Optimal/Upper
+fig5a_optimal <- ggplot(f_long_nofair_upper, 
        aes(x = capacity, 
            y = mean_value, 
            ymin = male_mean, 
@@ -444,12 +454,12 @@ ggplot(f_long_nofair_upper,
   geom_line(aes(y = female_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05)) +
   geom_line(aes(y = male_mean), colour = 'black', size = 0.5, position = position_dodge(width = 0.05))+
   geom_point(size = 6, shape = 18, position = position_dodge(width = 0.05)) +
-  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = 17, alpha = 1,
+  geom_point(aes(y = female_mean), color = 'black', size = 4, shape = shape_female, alpha = 1,
              position = position_dodge(width = 0.05)) +
-  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = 16, alpha = 1,
+  geom_point(aes(y = male_mean), color = 'black', size = 4, shape = shape_male, alpha = 1,
              position = position_dodge(width = 0.05)) +
-  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = 17, color = "black") +
-  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = 16, color = "black") +
+  geom_point(aes(x = 0.9, y = pre_ltu_female), size = 4, shape = shape_female, color = "black") +
+  geom_point(aes(x = 0.9, y = pre_ltu_male), size = 4, shape = shape_male, color = "black") +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   geom_text(aes(x = 0.9, y = 0.425, label = "ex-ante gender gap"),
@@ -474,8 +484,11 @@ ggplot(f_long_nofair_upper,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Lower
-ggplot(f_long_nofair_lower, 
+ggsave("output/Fig5a-optimal.pdf", fig5a_optimal, width = 7, height = 6)
+
+
+# (b) Random/Lower
+fig5b_random <- ggplot(f_long_nofair_lower, 
        aes(x = capacity, 
            y = mean_value, 
            ymin = male_mean, 
@@ -495,9 +508,9 @@ ggplot(f_long_nofair_lower,
   geom_point(aes(y = male_mean, shape = as.factor(1-female)), 
              position = position_dodge(width = 0.05), color = 'black', size = 4, alpha = 1) +
   geom_point(aes(x = 0.9, y = pre_ltu_female), 
-             size = 4, shape = 17, color = "black") +
+             size = 4, shape = shape_female, color = "black") +
   geom_point(aes(x = 0.9, y = pre_ltu_male), 
-             size = 4, shape = 16, color = "black") +
+             size = 4, shape = shape_male, color = "black") +
   geom_segment(aes(x = 0.9, xend = 0.9, y = pre_ltu_male, yend = pre_ltu_female),
                linetype = "solid", color = "black", size = 0.75) +
   labs(x = "Capacity Multiplier",
@@ -505,7 +518,7 @@ ggplot(f_long_nofair_lower,
        colour = "Policy:")+
   scale_fill_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
   scale_colour_manual(values = c("Belgian" = belgiumcolor, "Austrian" = austriacolor)) +
-  scale_shape_manual(values = c("0" = 16, "1" = 17), name = "Gender:",
+  scale_shape_manual(values = c("0" = shape_male, "1" = shape_female), name = "Gender:",
                      labels = c("0" = "Male", "1" = "Female")) +
   ylim(.34,.44) +
   theme_classic() +
@@ -522,6 +535,9 @@ ggplot(f_long_nofair_lower,
         legend.direction = "horizontal",
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
+
+ggsave("output/Fig5b-random.pdf", fig5b_random, width = 7, height = 6)
+
 
 # ---------------------------------------------------------------------------- #
 # End

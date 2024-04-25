@@ -394,10 +394,10 @@ db_almp_participants <- f_almp_participants(db_sim)
 # Appendix B.3, Figure 6: IATEs by Gender, Violin Plot
 # ---------------------------------------------------------------------------- #
 
-ggplot(db_iate_gender, aes(x=interaction(as.factor(female), y=IATE), 
+fig6_appendix_iates <- ggplot(db_iate_gender, aes(x=interaction(as.factor(female), y=IATE), 
                            y=Value, 
                            fill=as.factor(female))) +
-  geom_violin() +
+  geom_violin(alpha=0.6) +
   geom_hline(yintercept = 0) + 
   stat_summary(fun.y = "mean", 
                geom = "point", 
@@ -405,11 +405,13 @@ ggplot(db_iate_gender, aes(x=interaction(as.factor(female), y=IATE),
                aes(shape = as.factor(female)), 
                size = 3) +
   labs(y = "IATEs") +
-  scale_fill_discrete(
+  scale_fill_manual(
     labels = c("0" = "Male", "1" = "Female"),
+    values = c("0" = "orange", "1" = "blue"),
     name = "Gender") +
-  scale_shape_discrete(
+  scale_shape_manual(
     labels = c("0" = "Male", "1" = "Female"),
+    values = c("0" = shape_male, "1" = shape_female),
     name = "Gender") +
   scale_x_discrete(labels = rep(treatment_names, each=2)) +  
   theme_classic() +
@@ -418,34 +420,19 @@ ggplot(db_iate_gender, aes(x=interaction(as.factor(female), y=IATE),
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig6-appendix-iates.pdf", fig6_appendix_iates, width = 10, height = 8)
+
 
 # ---------------------------------------------------------------------------- #
 # Appendix B.4, Figure 7: Histograms of Risk Scores
 # ---------------------------------------------------------------------------- #
-# logistic regression
-ggplot(data=db_risk_scores, 
+# (a) logistic regression
+fig7a_risk <- ggplot(data=db_risk_scores, 
        aes(x = risk_score_log, fill = as.factor(female), group = as.factor(female))) +
-  geom_histogram(bins=75, position = "identity", alpha = 0.4, colour = "white") +
+  geom_histogram(bins=100, position = "identity", alpha = 0.4, colour = "white") +
   geom_vline(xintercept = 0.5, colour = "black", size = 0.5) +
-  scale_fill_discrete(# values = c("0" = "#D95F02", "1" = "#1B9E77"),
-                    labels = c("0" = "Male", "1" = "Female")) +
-  labs(y = "Frequency",
-       x = "Risk Score",
-       fill = "Gender:") +
-  xlim(0,1) +
-  theme_classic() +
-  theme(legend.position = "none",
-        axis.title.x=element_blank(),
-        axis.text = element_text(size = 16),
-        axis.title = element_text(size = 16))
-
-
-# statistical parity
-ggplot(data=db_risk_scores, 
-       aes(x = risk_score_sp, fill = as.factor(female))) +
-  geom_histogram(bins=75, position = "identity", alpha = 0.4, colour = "white") +
-  geom_vline(xintercept = 0.5, colour = "black", size = 0.5) +
-  scale_fill_discrete(# values = c("0" = "#D95F02", "1" = "#1B9E77"),
+  scale_fill_manual(
+    values = c("0" = "orange", "1" = "blue"),
     labels = c("0" = "Male", "1" = "Female")) +
   labs(y = "Frequency",
        x = "Risk Score",
@@ -457,13 +444,38 @@ ggplot(data=db_risk_scores,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# equal opportunity
-ggplot(data=db_risk_scores, 
+ggsave("output/Fig7a-appendix-risk.pdf", fig7a_risk, width = 6, height = 6)
+
+
+# (b) statistical parity
+fig7b_risk <- ggplot(data=db_risk_scores, 
+       aes(x = risk_score_sp, fill = as.factor(female))) +
+  geom_histogram(bins=75, position = "identity", alpha = 0.4, colour = "white") +
+  geom_vline(xintercept = 0.5, colour = "black", size = 0.5) +
+  scale_fill_manual(
+    values = c("0" = "orange", "1" = "blue"),
+    labels = c("0" = "Male", "1" = "Female")) +
+  labs(y = "Frequency",
+       x = "Risk Score",
+       fill = "Gender:") +
+  xlim(0,1) +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.x=element_blank(),
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16))
+
+ggsave("output/Fig7b-appendix-risk.pdf", fig7b_risk, width = 6, height = 6)
+
+
+# (c) equal opportunity
+fig7c_risk <- ggplot(data=db_risk_scores, 
        aes(x = risk_score_eo, fill = as.factor(female))) +
   # geom_density(alpha = 0.3) +
   geom_histogram(bins=75, position = "identity", alpha = 0.4, colour = "white") +
   geom_vline(xintercept = 0.5, colour = "black", size = 0.5) +
-  scale_fill_discrete(# values = c("0" = "#D95F02", "1" = "#1B9E77"),
+  scale_fill_manual(
+    values = c("0" = "orange", "1" = "blue"),
     labels = c("0" = "Male", "1" = "Female")) +
   labs(y = "Frequency",
        x = "Risk Score",
@@ -483,13 +495,15 @@ ggplot(data=db_risk_scores,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig7c-appendix-risk.pdf", fig7c_risk, width = 6, height = 6)
+
 
 # ---------------------------------------------------------------------------- #
 # Appendix B.6, Figure 8: Citizenship LTU gaps by Belgian/Austrian
 # ---------------------------------------------------------------------------- #
 
-# Belgian Upper
-ggplot(c_long_belgian_upper, aes(x = capacity, 
+# (a) Belgian Upper
+fig8a_app_Belgian_optimal <- ggplot(c_long_belgian_upper, aes(x = capacity, 
                                  y = mean_value, 
                                  ymin = swiss_mean, 
                                  ymax = nonswiss_mean, 
@@ -523,8 +537,11 @@ ggplot(c_long_belgian_upper, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Austrian Upper
-ggplot(c_long_austrian_upper, aes(x = capacity, 
+ggsave("output/Fig8a-Belgian-optimal.pdf", fig8a_app_Belgian_optimal, width = 7, height = 6)
+
+
+# (c) Austrian Upper
+fig8c_app_Austrian_optimal <- ggplot(c_long_austrian_upper, aes(x = capacity, 
                                  y = mean_value, 
                                  ymin = swiss_mean, 
                                  ymax = nonswiss_mean, 
@@ -552,8 +569,11 @@ ggplot(c_long_austrian_upper, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Belgian Lower
-ggplot(c_long_belgian_lower, aes(x = capacity, 
+ggsave("output/Fig8c-Austrian-optimal.pdf", fig8c_app_Austrian_optimal, width = 7, height = 6)
+
+
+# (b) Belgian Lower
+fig8b_app_Belgian_random <- ggplot(c_long_belgian_lower, aes(x = capacity, 
                                   y = mean_value, 
                                   ymin = swiss_mean, 
                                   ymax = nonswiss_mean, 
@@ -581,8 +601,11 @@ ggplot(c_long_belgian_lower, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Austrian Lower
-ggplot(c_long_austrian_lower, aes(x = capacity, 
+ggsave("output/Fig8b-Belgian-random.pdf", fig8b_app_Belgian_random, width = 7, height = 6)
+
+
+# (d) Austrian Lower
+fig8d_app_Austrian_random <- ggplot(c_long_austrian_lower, aes(x = capacity, 
                                  y = mean_value, 
                                  ymin = swiss_mean, 
                                  ymax = nonswiss_mean, 
@@ -624,13 +647,15 @@ ggplot(c_long_austrian_lower, aes(x = capacity,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
 
+ggsave("output/Fig8d-Austrian-random.pdf", fig8d_app_Austrian_random, width = 7, height = 6)
+
 
 # ---------------------------------------------------------------------------- #
 # Appendix B.6, Figure 9: Citizenship Gaps Overall
 # ---------------------------------------------------------------------------- #
 
-# Upper
-ggplot(c_long_nofair_upper, 
+# (a) optimal/upper
+fig9a_app_optimal <- ggplot(c_long_nofair_upper, 
        aes(x = capacity, 
            y = mean_value, 
            ymin = swiss_mean, 
@@ -673,8 +698,12 @@ ggplot(c_long_nofair_upper,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
-# Lower
-ggplot(c_long_nofair_lower, 
+ggsave("output/Fig9a-appendix-optimal.pdf", fig9a_app_optimal, width = 7, height = 6)
+
+
+
+# (b) radom/lower
+fig9b_app_ramdom <- ggplot(c_long_nofair_lower, 
        aes(x = capacity, 
            y = mean_value, 
            ymin = swiss_mean, 
@@ -718,11 +747,14 @@ ggplot(c_long_nofair_lower,
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
 
+ggsave("output/Fig9b-appendix-random.pdf", fig9b_app_ramdom, width = 7, height = 6)
+
+
 # ---------------------------------------------------------------------------- #
 # Figure 10: Married-Citizenship 
 # ---------------------------------------------------------------------------- #
-# 1. Unmarried Non-Citizen
-ggplot(db_nswiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+# (a) Unmarried Non-Citizen
+fig10a_app <- ggplot(db_nswiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
   geom_point(size = 4, shape = 18) +
   geom_point(aes(y = female_mean, shape = as.factor(female)), 
@@ -745,9 +777,11 @@ ggplot(db_nswiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, col
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig10a-appendix.pdf", fig10a_app, width = 7, height = 6)
 
-# 2. Married Non-Citizen
-ggplot(db_nswiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+
+# (b) Married Non-Citizen
+fig10b_app <- ggplot(db_nswiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
   geom_point(size = 4, shape = 18) +
   geom_point(aes(y = female_mean, shape = as.factor(female)), 
@@ -770,9 +804,12 @@ ggplot(db_nswiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colo
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig10b-appendix.pdf", fig10b_app, width = 7, height = 6)
+
+
 
 # 3. Unmarried Swiss Citizen
-ggplot(db_swiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+fig10c_app <- ggplot(db_swiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
   geom_point(size = 4, shape = 18) + 
   geom_point(aes(y = female_mean, shape = as.factor(female)), 
@@ -806,9 +843,11 @@ ggplot(db_swiss_nmarried, aes(x = capacity, y=mean_value, ymin = male_mean, colo
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16)) 
 
+ggsave("output/Fig10c-appendix.pdf", fig10c_app, width = 7, height = 6)
 
-# 4. Married Swiss Citizen
-ggplot(db_swiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
+
+# (d) Married Swiss Citizen
+fig10d_app <- ggplot(db_swiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colour=policy, ymax = female_mean, fill=policy,group=policy)) +
   geom_ribbon(alpha=.25) +
   geom_point(size = 4, shape = 18) +
   geom_point(aes(y = female_mean, shape = as.factor(female)), 
@@ -831,6 +870,8 @@ ggplot(db_swiss_married, aes(x = capacity, y=mean_value, ymin = male_mean, colou
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 16))
 
+ggsave("output/Fig10d-appendix.pdf", fig10d_app, width = 7, height = 6)
+
 
 
 # ---------------------------------------------------------------------------- #
@@ -843,19 +884,25 @@ cor(db_risk_vs_po$risk_score_sp, db_risk_vs_po$iapo_opt, method = "spearman")
 cor(db_risk_vs_po$risk_score_eo, db_risk_vs_po$iapo_opt, method = "spearman")
 
 
-# 1. logistic regression
-ggplot(db_risk_vs_po, aes(x = risk_score_log, y=iapo_opt, colour=as.factor(noprogram6))) +
+# (a) logistic regression
+fig11a_app <- ggplot(db_risk_vs_po, aes(x = risk_score_log, y=iapo_opt, colour=as.factor(noprogram6))) +
   geom_point(alpha=0.7, size=0.7) +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  xlim(0,0.92) + ylim(0,0.41) +
+  xlim(0.1,0.92) +
   labs(x = "Unconstraint Risk Scores",
        y = "Potential outcomes under optimal assignment") +
   scale_colour_manual(values = c("0" = "blue", "1" = "orange"),
                       labels = c("0" = "ALMP", "1" = "No ALMP"),
                       name = "Treatment:"
   ) +
+  geom_text(aes(x = 0.2, y = 0.345, label = "x=y"),
+            hjust = 0, vjust = 0,
+            color = "black", size = 8) +
+  geom_curve(aes(x = 0.23, y = 0.34, xend = 0.3, yend = 0.31),
+             curvature = 0.3, arrow = arrow(length = unit(0.1, "inches")),
+             linetype = "solid", color = "black", size = 0.75) +
   theme_classic() +
-  theme(legend.position = c(0.8, 0.25), 
+  theme(legend.position = c(0.8, 0.2), 
         legend.justification = c("center"), 
         legend.box.just = "right",
         # legend.box.background = element_rect(color="black", size=2),
@@ -869,12 +916,14 @@ ggplot(db_risk_vs_po, aes(x = risk_score_log, y=iapo_opt, colour=as.factor(nopro
         axis.title = element_text(size = 16)) +
   guides(color = guide_legend(override.aes = list(size = 5)))
 
+ggsave("output/Fig11a-appendix.pdf", fig11a_app, width = 7, height = 6, dpi = 300, device = "pdf")
 
-# 2. statistical parity
-ggplot(db_risk_vs_po, aes(x = risk_score_sp, y=iapo_opt, colour=as.factor(noprogram6))) +
+
+# (b) statistical parity
+fig11b_app <- ggplot(db_risk_vs_po, aes(x = risk_score_sp, y=iapo_opt, colour=as.factor(noprogram6))) +
   geom_point(alpha=0.7, size=0.7) +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  xlim(0,0.92) + ylim(0,0.41) +
+  xlim(0.1,0.92) +
   labs(x = "Risk Scores under Statistical Parity",
        y = "Potential outcomes under optimal assignment") +
   scale_colour_manual(values = c("0" = "blue", "1" = "orange"),
@@ -896,12 +945,14 @@ ggplot(db_risk_vs_po, aes(x = risk_score_sp, y=iapo_opt, colour=as.factor(noprog
         axis.title = element_text(size = 16)) +
   guides(color = guide_legend(override.aes = list(size = 5)))
 
+ggsave("output/Fig11b-appendix.pdf", fig11b_app, width = 7, height = 6, dpi = 300)
 
-# 3. Equal Opportunity
-ggplot(db_risk_vs_po, aes(x = risk_score_eo, y=iapo_opt, colour=as.factor(noprogram6))) +
+
+# (c) Equal Opportunity
+fig11c_app <- ggplot(db_risk_vs_po, aes(x = risk_score_eo, y=iapo_opt, colour=as.factor(noprogram6))) +
   geom_point(alpha=0.7, size=0.7) +
   geom_abline(intercept = 0, slope = 1, color = "black") +
-  xlim(0,0.92) + ylim(0,0.41) +
+  xlim(0.1,0.92) +
   labs(x = "Risk Scores under Equal Opportunity",
        y = "Potential outcomes under optimal assignment") +
   scale_colour_manual(values = c("0" = "blue", "1" = "orange"),
@@ -923,41 +974,15 @@ ggplot(db_risk_vs_po, aes(x = risk_score_eo, y=iapo_opt, colour=as.factor(noprog
         axis.title = element_text(size = 16)) +
   guides(color = guide_legend(override.aes = list(size = 5)))
 
+ggsave("output/Fig11c-appendix.pdf", fig11c_app, width = 7, height = 6, dpi = 300)
+
 
 # ---------------------------------------------------------------------------- #
-# Appendix B. , Figure xx. 
+# Appendix B.9 , Figure 12 
 # ---------------------------------------------------------------------------- #
 
-ggplot(db_sim, aes(x=treatment6, group=female, fill=as.factor(female))) +
-  geom_bar(stat = "count", position = "dodge") +
-  theme_classic()
+# data in "db_almp_participants", bar plots prepared in Excel.
 
-ggplot(db_sim, aes(x=policy_Belgian_risk_score_log_upper_1, group=female, fill=as.factor(female))) +
-  geom_bar(stat = "count", position = "dodge") +
-  theme_classic()
-
-ggplot(db_sim, aes(x=policy_Belgian_risk_score_sp_upper_1, group=female, fill=as.factor(female))) +
-  geom_bar(stat = "count", position = "dodge") +
-  theme_classic()
-
-ggplot(db_sim, aes(x=policy_Belgian_risk_score_eo_upper_1, group=female, fill=as.factor(female))) +
-  geom_bar(stat = "count", position = "dodge") +
-  theme_classic()
-
-# by gender!
-db_almp_participants
-
-barplot(db_almp_participants[,1])
-
-ggplot(db_almp_participants, aes(x=)) +
-  geom_bar()
-
-df_long <- gather(data = db_almp_participants, key = "category", value = "value")
-
-# Create the bar plot
-ggplot(df_long, aes(x = category, y = value)) +
-  geom_bar(stat = "identity") +
-  labs(x = "Category", y = "Value", title = "Bar Plot")
 
 
 # ---------------------------------------------------------------------------- #

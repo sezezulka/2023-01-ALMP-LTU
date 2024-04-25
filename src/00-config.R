@@ -39,6 +39,9 @@ package_list <- c("tidyverse", "grf", "devtools", "policytree", "fairml", "glmne
 belgiumcolor="#1704E0"
 austriacolor="#E03D2B"
 
+shape_male <- 17
+shape_female <- 16
+
 # ---------------------------------------------------------------------------- #
 # Path variables
 # ---------------------------------------------------------------------------- #
