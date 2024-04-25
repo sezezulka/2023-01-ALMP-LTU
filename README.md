@@ -7,7 +7,7 @@ Algorithmic fairness focuses on the distribution of predictions at the time of t
 ## Setup
 To replicate the results, get access to the scientific usefiles from SWISSbase. 
 
-Always start by executing ""00-config.R"". First, specify the location of the working directory. It installs the required packages if not already available (except "devtools" and "causalDML"), specifies the seed, the required path-variables, and variable lists. 
+Always start by executing "00-config.R". First, specify the location of the working directory. It installs the required packages if not already available (except "devtools" and "causalDML"), specifies the seed, the required path-variables, and variable lists. 
 
 - "01-preprocessing.R" prepares the raw data for the analysis. See Zezulka and Gening (2024) for details.
 
@@ -53,7 +53,7 @@ Sebastian Zezulka and Konstantin Genin. 2024. From the Fair Distribution of Pred
 The preprint is available on [arxiv](https://arxiv.org/abs/2401.14438).
 
 ## Acknowledgements
-The scripts "01-preprocessing.R" and "02-potential-outcomes" are based on the publications by:
+The scripts "01-preprocessing.R" and "02-potential-outcomes" are based on the following publications:
 1. Michael C. Knaus (2022). Double machine learning-based programme evaluation under unconfoundedness.The Econometrics Journal.
 see especially: https://github.com/MCKnaus/mcknaus.github.io/blob/master/assets/code/Data_preparation_MCK2022.R
 
