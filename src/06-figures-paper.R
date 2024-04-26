@@ -25,8 +25,6 @@ library(readr)
 db_sim <- read.csv(data_path_sim)
 db_ltu_swiss <- readxl::read_xlsx("data/estat-une-ltu.xlsx")
 
-# TODO
-db_sim <- read.csv("data/ARCHIVE/1203_ALMP_effects_risk_fairFemale_sim.csv")
 
 # ---------------------------------------------------------------------------- #
 # Functions

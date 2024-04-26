@@ -24,7 +24,7 @@
 #
 # ---------------------------------------------------------------------------- #
 # TODO set working directory 
-wd_path <- c("C:/Users/Zezulka/Documents/01_PhD/030-Projects/2023-01_ALMP_LTU")
+wd_path <- c("set-your-path")
 setwd(wd_path)
 
 # ---------------------------------------------------------------------------- #
